@@ -2,7 +2,7 @@
   <div id="viewer">
     <header id="header">
       <div class="row">
-        <h1 class="title">GeoParquet Viewer</h1>
+        <h1 class="title">GeoParquet Viewer (experimental)</h1>
         <button @click="showLoad">Load Data</button>
         <button @click="showAbout">About</button>
       </div>
