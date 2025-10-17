@@ -119,9 +119,7 @@ function getDefaultUrl() {
   if (url) {
     return url;
   } else {
-    const relPath = './airports.parquet';
-    const absPath = new URL(relPath, window.location.href);
-    return absPath.toString();
+    return null;
   }
 }
 
@@ -138,7 +136,7 @@ export default {
       {
         source: new VectorSource(),
         map: null,
-        url: getDefaultUrl(),
+        url: null,
         defaultStyle: getStyle(),
         selectStyle: getStyle('#FF0000')
       },
@@ -219,8 +217,14 @@ export default {
     }
   },
   mounted() {
+    this.url = getDefaultUrl();
     this.createMap();
-    this.load();
+    if (this.url) {
+      this.load();
+    }
+    else {
+      this.showLoad();
+    }
   },
   methods: {
     showModal(component, props = {}, events = {}, id = null) {
