@@ -1,16 +1,16 @@
 <template>
-  <Modal width="80%" title="Parquet Metadata">
+  <BaseModal width="80%" title="Parquet Metadata">
     <pre>{{ formatted }}</pre>
-  </Modal>
+  </BaseModal>
 </template>
 
 <script>
-import Modal from './Modal.vue';
+import BaseModal from './BaseModal.vue';
 
 export default {
   name: 'AboutModal',
   components: {
-    Modal
+    BaseModal
   },
   props: {
     data: {

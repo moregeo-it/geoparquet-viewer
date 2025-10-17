@@ -10,13 +10,14 @@
         <span class="title">
           <code>{{ this.url }}</code>
           &nbsp;
-          <span class="counts">(
-            {{ loadedNumRows }} /
+          <span class="counts"
+            >( {{ loadedNumRows }} /
             <template v-if="totalNumRows >= 0">{{ totalNumRows }}</template>
             <template v-else>?</template>
             rows
             <button v-if="!loading && !isComplete" @click="loadMore">Load more...</button>
-          )</span>
+            )</span
+          >
         </span>
         <button v-if="metadata" @click="showMetadata">Parquet Metadata</button>
         <button v-if="geoMetadata" @click="showGeoMetadata">GeoParquet Metadata</button>
@@ -63,7 +64,7 @@
         @close="hideModal(modal)"
       />
     </template>
-    <span v-if="loading" id="loading"><Spinner /></span>
+    <span v-if="loading" id="loading"><LoadingSpinner /></span>
   </div>
 </template>
 
@@ -84,7 +85,7 @@ import { getStyle } from './map.js';
 
 import Utils from './utils.js';
 
-import Spinner from './components/Spinner.vue';
+import LoadingSpinner from './components/LoadingSpinner.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
@@ -96,7 +97,7 @@ const compressors = {
 };
 
 // Todo: Ugly hack to change the default rendering of Date objects
-Date.prototype.toString = Date.prototype.toISOString
+Date.prototype.toString = Date.prototype.toISOString;
 
 function getDefaults() {
   return {
@@ -117,8 +118,7 @@ function getDefaultUrl() {
   const url = urlParams.get('url');
   if (url) {
     return url;
-  }
-  else {
+  } else {
     const relPath = './airports.parquet';
     const absPath = new URL(relPath, window.location.href);
     return absPath.toString();
@@ -131,7 +131,7 @@ export default {
     AboutModal,
     LoadDataModal,
     MetadataModal,
-    Spinner
+    LoadingSpinner
   },
   data() {
     return Object.assign(
@@ -197,7 +197,7 @@ export default {
     },
     columnsInSchema() {
       if (this.schema) {
-        return this.schema.children.map(child => child.element.name);
+        return this.schema.children.map((child) => child.element.name);
       }
       return [];
     },
@@ -274,8 +274,7 @@ export default {
       let fitOpts;
       if (type === 'Point') {
         fitOpts = { minResolution: 1000 };
-      }
-      else {
+      } else {
         fitOpts = { padding: [100, 100, 100, 100] };
       }
       this.map.getView().fit(geometry.getExtent(), fitOpts);
@@ -361,7 +360,7 @@ export default {
           rowStart,
           rowEnd,
           utf8: false, // Don't convert binary data as UTF-8, otherwise we can't read the WKB properly
-          onChunk: ({columnName, columnData}) => {
+          onChunk: ({ columnName, columnData }) => {
             if (this.pageSize) {
               columnData = columnData.slice(0, this.pageSize);
             }

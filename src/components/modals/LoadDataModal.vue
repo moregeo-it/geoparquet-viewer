@@ -1,19 +1,19 @@
 <template>
-  <Modal width="50%" title="Load Data" @submit="submit">
+  <BaseModal width="50%" title="Load Data" @submit="submit">
     <div class="row">
       <label for="url">URL:</label>
       <input class="input" id="url" v-model="newUrl" />
     </div>
-  </Modal>
+  </BaseModal>
 </template>
 
 <script>
-import Modal from './Modal.vue';
+import BaseModal from './BaseModal.vue';
 
 export default {
   name: 'LoadDataModal',
   components: {
-    Modal
+    BaseModal
   },
   data() {
     return {

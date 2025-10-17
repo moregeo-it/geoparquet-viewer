@@ -4,7 +4,7 @@
 
 <script>
 export default {
-  name: 'Spinner'
+  name: 'LoadingSpinner'
 };
 </script>
 

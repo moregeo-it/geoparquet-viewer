@@ -28,7 +28,7 @@
 
 <script>
 export default {
-  name: 'Modal',
+  name: 'BaseModal',
   props: {
     title: {
       type: String,
