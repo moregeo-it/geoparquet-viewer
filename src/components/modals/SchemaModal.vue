@@ -1,89 +1,122 @@
 <template>
-  <BaseModal width="70%" title="Schema">
-    <table class="schema-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Column</th>
-          <th>Type</th>
-          <th>Nullable</th>
-          <th>Info</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="(col, i) in schema"
-          :key="col.name"
-          :class="{ 'geo-column': isGeoColumn(col.name) }"
+  <v-dialog
+    :model-value="modelValue"
+    @update:model-value="$emit('update:modelValue', $event)"
+    max-width="800"
+    scrollable
+  >
+    <v-card>
+      <v-card-title>Schema</v-card-title>
+      <v-card-text>
+        <v-data-table
+          :headers="headers"
+          :items="schemaItems"
+          density="compact"
+          items-per-page="-1"
+          :row-props="schemaRowProps"
         >
-          <td class="center">{{ i + 1 }}</td>
-          <td>
-            <strong>{{ col.name }}</strong>
-            <span v-if="isPrimaryGeo(col.name)" class="badge">primary geometry</span>
-            <span v-else-if="isGeoColumn(col.name)" class="badge badge-secondary">geometry</span>
-          </td>
-          <td><code>{{ col.type }}</code></td>
-          <td class="center">{{ col.nullable ? 'Yes' : 'No' }}</td>
-          <td>
-            <template v-if="isGeoColumn(col.name)">
-              <span v-if="getGeoInfo(col.name).encoding">
-                {{ getGeoInfo(col.name).encoding }}
+          <template #bottom />
+
+          <template #[`item.name`]="{ value }">
+            <strong>{{ value }}</strong>
+            <v-chip
+              v-if="isPrimaryGeo(value)"
+              size="x-small"
+              color="success"
+              class="ml-2"
+            >
+              primary geometry
+            </v-chip>
+            <v-chip
+              v-else-if="isGeoColumn(value)"
+              size="x-small"
+              color="grey"
+              class="ml-2"
+            >
+              geometry
+            </v-chip>
+          </template>
+
+          <template #[`item.type`]="{ value }">
+            <code>{{ value }}</code>
+          </template>
+
+          <template #[`item.nullable`]="{ value }">
+            {{ value ? 'Yes' : 'No' }}
+          </template>
+
+          <template #[`item.info`]="{ item }">
+            <template v-if="isGeoColumn(item.name)">
+              <span v-if="getGeoInfo(item.name).encoding">
+                {{ getGeoInfo(item.name).encoding }}
               </span>
-              <span v-if="getGeoInfo(col.name).geometry_types?.length">
-                ({{ getGeoInfo(col.name).geometry_types.join(', ') }})
+              <span v-if="getGeoInfo(item.name).geometry_types?.length">
+                ({{ getGeoInfo(item.name).geometry_types.join(', ') }})
               </span>
             </template>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div v-if="geoMetadata" class="geo-summary">
-      <h3>GeoParquet Info</h3>
-      <table class="kv-table">
-        <tbody>
-        <tr>
-          <td>Version</td>
-          <td>{{ geoMetadata.version || 'unknown' }}</td>
-        </tr>
-        <tr>
-          <td>Primary column</td>
-          <td>{{ geoMetadata.primary_column }}</td>
-        </tr>
-        <tr v-if="crs">
-          <td>CRS</td>
-          <td>
-            <code>{{ crsName }}</code>
-          </td>
-        </tr>
-        <tr v-if="bbox">
-          <td>Bounding Box</td>
-          <td>{{ bbox.join(', ') }}</td>
-        </tr>
-        </tbody>
-      </table>
-    </div>
-  </BaseModal>
+          </template>
+        </v-data-table>
+
+        <template v-if="geoMetadata">
+          <h3 class="text-subtitle-1 font-weight-bold mt-4 mb-2">GeoParquet Info</h3>
+          <v-table density="compact">
+            <tbody>
+              <tr>
+                <td class="font-weight-bold" style="white-space: nowrap">Version</td>
+                <td>{{ geoMetadata.version || 'unknown' }}</td>
+              </tr>
+              <tr>
+                <td class="font-weight-bold" style="white-space: nowrap">Primary column</td>
+                <td>{{ geoMetadata.primary_column }}</td>
+              </tr>
+              <tr v-if="crs">
+                <td class="font-weight-bold" style="white-space: nowrap">CRS</td>
+                <td><code>{{ crsName }}</code></td>
+              </tr>
+              <tr v-if="bbox">
+                <td class="font-weight-bold" style="white-space: nowrap">Bounding Box</td>
+                <td>{{ bbox.join(', ') }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </template>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="$emit('update:modelValue', false)">Close</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
-import BaseModal from './BaseModal.vue';
-
 export default {
   name: 'SchemaModal',
-  components: {
-    BaseModal
-  },
   props: {
-    schema: {
-      type: Array,
-      required: true
-    },
-    geoMetadata: {
-      type: Object,
-      default: null
-    }
+    modelValue: { type: Boolean, default: false },
+    schema: { type: Array, required: true },
+    geoMetadata: { type: Object, default: null }
   },
+  emits: ['update:modelValue'],
   computed: {
+    headers() {
+      return [
+        { title: '#', key: 'index', width: 50, sortable: false, align: 'center' },
+        { title: 'Column', key: 'name', sortable: false },
+        { title: 'Type', key: 'type', sortable: false },
+        { title: 'Nullable', key: 'nullable', sortable: false, align: 'center' },
+        { title: 'Info', key: 'info', sortable: false }
+      ];
+    },
+    schemaItems() {
+      return this.schema.map((col, i) => ({
+        index: i + 1,
+        name: col.name,
+        type: col.type,
+        nullable: col.nullable,
+        info: ''
+      }));
+    },
     geoColumns() {
       return this.geoMetadata?.columns || {};
     },
@@ -112,68 +145,12 @@ export default {
     },
     getGeoInfo(name) {
       return this.geoColumns[name] || {};
+    },
+    schemaRowProps({ item }) {
+      return {
+        class: this.isGeoColumn(item.name) ? 'bg-green-lighten-5' : ''
+      };
     }
   }
 };
 </script>
-
-<style scoped>
-.schema-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-.schema-table th {
-  background: #e0e0e0;
-  padding: 6px 10px;
-  text-align: left;
-  border-bottom: 2px solid #999;
-}
-.schema-table td {
-  padding: 5px 10px;
-  border-bottom: 1px solid #eee;
-}
-.schema-table tr.geo-column {
-  background: #e8f5e9;
-}
-.center {
-  text-align: center;
-}
-code {
-  background: #f0f0f0;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 0.82rem;
-}
-.badge {
-  display: inline-block;
-  background: #4caf50;
-  color: white;
-  padding: 1px 6px;
-  border-radius: 8px;
-  font-size: 0.7rem;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-.badge-secondary {
-  background: #78909c;
-}
-.geo-summary {
-  margin-top: 1.5em;
-}
-.geo-summary h3 {
-  margin: 0 0 0.5em;
-  font-size: 1rem;
-}
-.kv-table {
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-.kv-table td {
-  padding: 3px 12px 3px 0;
-}
-.kv-table td:first-child {
-  font-weight: 600;
-  white-space: nowrap;
-}
-</style>

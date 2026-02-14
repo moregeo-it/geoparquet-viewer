@@ -1,97 +1,157 @@
 <template>
-  <div id="viewer">
-    <header id="header">
-      <div class="row header-row">
-        <h1 class="title">GeoParquet Viewer</h1>
-        <div class="header-actions">
-          <button @click="showLoad" class="btn">Load Data</button>
-          <button v-if="schema" @click="showSchemaModal" class="btn">Schema</button>
-          <button v-if="kvMetadata" @click="showKvMetadata" class="btn">KV Metadata</button>
-          <button v-if="geoMetadata" @click="showGeoMetadata" class="btn">Geo Metadata</button>
-          <button v-if="fileMetadata" @click="showFileMetadata" class="btn">File Info</button>
-          <button @click="showAboutModal" class="btn">About</button>
-        </div>
-      </div>
-      <div v-if="source" class="row sub-header">
-        <span class="source-info">
-          <code>{{ displaySource }}</code>
-        </span>
-        <span class="row-counts">
-          <template v-if="filteredCount !== null && filteredCount !== totalRows">
-            {{ filteredCount.toLocaleString() }} matched &middot;
-          </template>
-          {{ loadedCount.toLocaleString() }} loaded /
-          {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
-        </span>
-      </div>
-    </header>
+  <v-app>
+    <v-progress-linear
+      v-if="loading"
+      indeterminate
+      color="primary"
+      height="3"
+      style="position: fixed; top: 0; z-index: 9999"
+    />
 
-    <main id="main">
-      <template v-if="source">
-        <div id="left-panel">
-          <FilterPanel
-            v-if="nonGeoColumns.length > 0"
-            :columns="nonGeoColumns"
-            :filters="filters"
-            @apply="applyFilters"
-          />
-          <TableView
-            :rows="rows"
-            :columns="nonGeoColumns"
-            :selectedIndex="selectedIndex"
-            @select="onTableSelect"
-          />
-          <div v-if="hasMore" class="load-more-bar">
-            <button @click="loadMore" :disabled="loading" class="btn btn-sm">
-              Load more ({{ pageSize.toLocaleString() }} rows)
-            </button>
-            <button
-              v-if="remainingRows > pageSize"
-              @click="loadAll"
-              :disabled="loading"
-              class="btn btn-sm"
+    <v-app-bar color="grey-darken-3" density="compact" flat>
+      <v-app-bar-title class="text-body-1 font-weight-bold flex-grow-0 mr-4">
+        GeoParquet Viewer
+      </v-app-bar-title>
+      <v-spacer />
+      <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
+      <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Schema</v-btn>
+      <v-btn
+        v-if="kvMetadata"
+        size="small"
+        @click="openMetadataDialog('Key-Value Metadata', kvMetadata)"
+      >
+        KV Metadata
+      </v-btn>
+      <v-btn
+        v-if="geoMetadata"
+        size="small"
+        @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)"
+      >
+        Geo Metadata
+      </v-btn>
+      <v-btn
+        v-if="fileMetadata"
+        size="small"
+        @click="openMetadataDialog('Parquet File Metadata', fileMetadata)"
+      >
+        File Info
+      </v-btn>
+      <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
+    </v-app-bar>
+
+    <v-main>
+      <div class="d-flex flex-column fill-height">
+        <v-toolbar
+          v-if="source"
+          density="compact"
+          color="grey-darken-1"
+          flat
+          class="flex-grow-0"
+        >
+          <v-toolbar-title class="text-caption">
+            <code>{{ displaySource }}</code>
+          </v-toolbar-title>
+          <v-spacer />
+          <span class="text-caption text-grey-lighten-1 mr-3">
+            <template v-if="filteredCount !== null && filteredCount !== totalRows">
+              {{ filteredCount.toLocaleString() }} matched &middot;
+            </template>
+            {{ loadedCount.toLocaleString() }} loaded /
+            {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
+          </span>
+        </v-toolbar>
+
+        <div v-if="source" class="content-panels d-flex flex-grow-1" style="min-height: 0">
+          <div class="left-panel d-flex flex-column">
+            <FilterPanel
+              v-if="nonGeoColumns.length > 0"
+              :columns="nonGeoColumns"
+              :filters="filters"
+              @apply="applyFilters"
+            />
+            <TableView
+              :rows="rows"
+              :columns="nonGeoColumns"
+              :selectedIndex="selectedIndex"
+              @select="onTableSelect"
+            />
+            <div
+              v-if="hasMore"
+              class="d-flex justify-center ga-2 pa-1 bg-grey-lighten-4"
+              style="border-top: 1px solid #ddd"
             >
-              Load all remaining
-            </button>
+              <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
+                Load more ({{ pageSize.toLocaleString() }} rows)
+              </v-btn>
+              <v-btn
+                v-if="remainingRows > pageSize"
+                size="small"
+                variant="outlined"
+                @click="loadAll"
+                :disabled="loading"
+              >
+                Load all remaining
+              </v-btn>
+            </div>
+          </div>
+          <div class="right-panel">
+            <MapView
+              ref="mapView"
+              :features="features"
+              :selectedIndex="selectedIndex"
+              :bounds="mapBounds"
+              @select="onMapSelect"
+              @viewportChange="onViewportChange"
+            />
           </div>
         </div>
-        <div id="right-panel">
-          <MapView
-            ref="mapView"
-            :features="features"
-            :selectedIndex="selectedIndex"
-            :bounds="mapBounds"
-            @select="onMapSelect"
-            @viewportChange="onViewportChange"
-          />
+
+        <div
+          v-else
+          class="d-flex flex-column align-center justify-center flex-grow-1 text-center pa-8"
+        >
+          <h2 class="text-h5 mb-2">GeoParquet Viewer</h2>
+          <p class="text-body-2 text-grey-darken-1 mb-1" style="max-width: 500px">
+            Load a <a href="https://geoparquet.org" target="_blank">GeoParquet</a> file to
+            visualize it on a map and explore the data in a table.
+          </p>
+          <p class="text-body-2 text-grey-darken-1" style="max-width: 500px">
+            Supports local files and remote URLs with HTTP range requests.
+          </p>
+          <v-btn color="primary" class="mt-4" size="large" @click="loadDialogOpen = true">
+            Load Data
+          </v-btn>
         </div>
-      </template>
-      <div v-else class="welcome">
-        <h2>GeoParquet Viewer</h2>
-        <p>
-          Load a <a href="https://geoparquet.org" target="_blank">GeoParquet</a> file to visualize
-          it on a map and explore the data in a table.
-        </p>
-        <p>Supports local files and remote URLs with HTTP range requests.</p>
-        <button @click="showLoad" class="btn btn-primary">Load Data</button>
       </div>
-    </main>
+    </v-main>
 
-    <div v-if="statusMessage" class="status-bar" :class="{ error: isError }">
+    <v-sheet
+      v-if="statusMessage"
+      :color="isError ? 'error' : 'grey-darken-3'"
+      class="status-bar text-caption px-3 d-flex align-center"
+      :class="isError ? 'text-white' : 'text-grey-lighten-1'"
+    >
       {{ statusMessage }}
-    </div>
+    </v-sheet>
 
-    <template v-for="modal in modals" :key="modal.id">
-      <component
-        :is="modal.component"
-        v-bind="modal.props"
-        v-on="modal.events"
-        @close="hideModal(modal)"
-      />
-    </template>
-
-    <LoadingSpinner v-if="loading" />
-  </div>
+    <LoadDataModal
+      v-model="loadDialogOpen"
+      :url="source || ''"
+      @save="loadFromUrl"
+      @load-file="loadFromFile"
+    />
+    <SchemaModal
+      v-model="schemaDialogOpen"
+      :schema="schema || []"
+      :geo-metadata="geoMetadata"
+    />
+    <MetadataModal
+      v-model="metadataDialogOpen"
+      :title="metadataDialogTitle"
+      :data="metadataDialogData"
+    />
+    <AboutModal v-model="aboutDialogOpen" />
+  </v-app>
 </template>
 
 <script>
@@ -108,12 +168,10 @@ import {
   queryCount
 } from './db.js';
 import { wkbToGeoJSON, computeBounds } from './wkb.js';
-import Utils from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
 import FilterPanel from './components/FilterPanel.vue';
-import LoadingSpinner from './components/LoadingSpinner.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
@@ -134,7 +192,6 @@ export default {
     MapView,
     TableView,
     FilterPanel,
-    LoadingSpinner,
     AboutModal,
     LoadDataModal,
     MetadataModal,
@@ -143,9 +200,9 @@ export default {
   data() {
     return {
       // Source
-      source: null, // DuckDB source path (URL or registered filename)
-      displaySource: '', // Human-readable source name
-      localFileName: null, // Registered local file name
+      source: null,
+      displaySource: '',
+      localFileName: null,
 
       // Schema & metadata
       schema: null,
@@ -180,14 +237,22 @@ export default {
       loading: false,
       statusMessage: '',
       isError: false,
-      modals: []
+
+      // Dialog visibility
+      loadDialogOpen: false,
+      schemaDialogOpen: false,
+      metadataDialogOpen: false,
+      aboutDialogOpen: false,
+
+      // Metadata dialog content (shared by KV / Geo / File metadata)
+      metadataDialogTitle: '',
+      metadataDialogData: null
     };
   },
   computed: {
     /** The primary geometry column name from GeoParquet metadata or schema detection */
     primaryGeoColumn() {
       if (this.geoMetadata?.primary_column) return this.geoMetadata.primary_column;
-      // Fallback: detect geometry column from schema type
       return this.detectedGeoColumn;
     },
     /** Detected geometry column from schema (fallback when no geo metadata) */
@@ -195,11 +260,9 @@ export default {
       if (!this.schema) return null;
       const geoTypes = ['GEOMETRY', 'BLOB', 'WKB_GEOMETRY', 'BYTEA'];
       const geoNames = ['geometry', 'geom', 'wkb_geometry', 'the_geom', 'shape'];
-      // First try matching known geometry column names
       for (const col of this.schema) {
         if (geoNames.includes(col.name.toLowerCase())) return col.name;
       }
-      // Then try matching geometry types
       for (const col of this.schema) {
         if (geoTypes.includes(col.type.toUpperCase())) return col.name;
       }
@@ -209,13 +272,12 @@ export default {
     primaryGeoCrs() {
       if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return null;
       const colMeta = this.geoMetadata.columns[this.primaryGeoColumn];
-      return colMeta?.crs ?? null; // absent/null = WGS 84 per spec
+      return colMeta?.crs ?? null;
     },
     /** Whether geometry needs reprojection to WGS 84 for display */
     needsReprojection() {
       const crs = this.primaryGeoCrs;
-      if (!crs) return false; // null/absent CRS = WGS 84
-      // Already EPSG:4326
+      if (!crs) return false;
       if (crs.id?.authority === 'EPSG' && crs.id?.code === 4326) return false;
       return true;
     },
@@ -224,13 +286,12 @@ export default {
      * Always passes the full PROJJSON from GeoParquet metadata instead of EPSG codes,
      * because DuckDB-WASM's spatial extension doesn't ship the PROJ database needed
      * for EPSG code lookups (crashes with _setThrew). PROJ can parse PROJJSON directly.
-     * null when no reprojection is needed.
      */
     sourceCrsString() {
       if (!this.needsReprojection) return null;
       return JSON.stringify(this.primaryGeoCrs);
     },
-    /** Whether the primary geo column has covering/bbox metadata (enables efficient spatial filtering) */
+    /** Whether the primary geo column has covering/bbox metadata */
     hasBboxCovering() {
       if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return false;
       const colMeta = this.geoMetadata.columns[this.primaryGeoColumn];
@@ -239,7 +300,6 @@ export default {
     /** All geometry column names */
     geoColumns() {
       if (this.geoMetadata?.columns) return Object.keys(this.geoMetadata.columns);
-      // Fallback: just the detected column
       if (this.detectedGeoColumn) return [this.detectedGeoColumn];
       return [];
     },
@@ -256,7 +316,6 @@ export default {
     },
     /** Whether there are more rows to load */
     hasMore() {
-      // When viewport-filtered without an explicit count, use page fullness
       if (this.hasBboxCovering && this.viewportBounds && this.filteredCount === null) {
         return this.lastPageFull;
       }
@@ -276,60 +335,15 @@ export default {
     if (url) {
       this.loadFromUrl(url);
     } else {
-      this.showLoad();
+      this.loadDialogOpen = true;
     }
   },
   methods: {
-    // ── Modal management ──────────────────────────────────
-    showModal(component, props = {}, events = {}, id = null) {
-      this.modals.push({
-        component,
-        props,
-        events,
-        id: id || 'modal_' + Date.now()
-      });
-    },
-    hideModal(modal) {
-      const id = Utils.isObject(modal) ? modal.id : modal;
-      const index = this.modals.findIndex((m) => m.id === id);
-      if (index >= 0) this.modals.splice(index, 1);
-    },
-    showAboutModal() {
-      this.showModal('AboutModal');
-    },
-    showLoad() {
-      this.showModal(
-        'LoadDataModal',
-        { url: this.source || '' },
-        {
-          save: (url) => this.loadFromUrl(url),
-          loadFile: (file) => this.loadFromFile(file)
-        }
-      );
-    },
-    showSchemaModal() {
-      this.showModal('SchemaModal', {
-        schema: this.schema,
-        geoMetadata: this.geoMetadata
-      });
-    },
-    showKvMetadata() {
-      this.showModal('MetadataModal', {
-        title: 'Key-Value Metadata',
-        data: this.kvMetadata
-      });
-    },
-    showGeoMetadata() {
-      this.showModal('MetadataModal', {
-        title: 'GeoParquet Metadata',
-        data: this.geoMetadata
-      });
-    },
-    showFileMetadata() {
-      this.showModal('MetadataModal', {
-        title: 'Parquet File Metadata',
-        data: this.fileMetadata
-      });
+    // ── Dialog helpers ─────────────────────────────────────
+    openMetadataDialog(title, data) {
+      this.metadataDialogTitle = title;
+      this.metadataDialogData = data;
+      this.metadataDialogOpen = true;
     },
 
     // ── Status ────────────────────────────────────────────
@@ -345,7 +359,6 @@ export default {
 
     // ── Data loading ──────────────────────────────────────
     async loadFromUrl(url) {
-      // Update URL bar
       history.pushState({}, '', `?url=${encodeURIComponent(url)}`);
       this.reset();
       this.source = url;
@@ -373,7 +386,6 @@ export default {
     },
 
     reset() {
-      // Drop previously registered local file
       if (this.localFileName) {
         dropFile(this.localFileName).catch(() => {});
       }
@@ -399,19 +411,15 @@ export default {
     async loadData() {
       this.loading = true;
       try {
-        // Step 1: Initialize DuckDB
         this.setStatus('Initializing DuckDB...');
         await initDB((msg) => this.setStatus(msg));
 
-        // Step 2: Get schema
         this.setStatus('Reading schema...');
         this.schema = await getSchema(this.source);
 
-        // Step 3: Get row count
         this.setStatus('Counting rows...');
         this.totalRows = await getRowCount(this.source);
 
-        // Step 4: Get KV metadata (includes GeoParquet 'geo' key)
         this.setStatus('Reading metadata...');
         try {
           this.kvMetadata = await getKVMetadata(this.source);
@@ -422,14 +430,12 @@ export default {
           console.warn('Could not read KV metadata:', e.message);
         }
 
-        // Step 5: Get file-level metadata
         try {
           this.fileMetadata = await getParquetFileMetadata(this.source);
         } catch (e) {
           console.warn('Could not read file metadata:', e.message);
         }
 
-        // Step 6: Load first page of data
         this.setStatus('Loading data...');
         await this.executeQuery(0);
 
@@ -441,7 +447,6 @@ export default {
         this.setStatus(`Error: ${e.message}`, true);
       } finally {
         this.loading = false;
-        // If the viewport changed while we were loading, reload with bbox
         if (this.pendingViewportReload && this.hasBboxCovering) {
           this.pendingViewportReload = false;
           this.reloadForViewport();
@@ -468,7 +473,7 @@ export default {
       this.loading = true;
       try {
         this.setStatus('Loading all remaining data...');
-        await this.executeQuery(this.currentOffset, null); // null limit = load all
+        await this.executeQuery(this.currentOffset, null);
         this.setStatus(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
       } catch (e) {
         this.setStatus(`Error: ${e.message}`, true);
@@ -481,13 +486,11 @@ export default {
       this.filters = newFilters;
       this.loading = true;
       try {
-        // Reset data for new filter
         this.rows = [];
         this.features = [];
         this.currentOffset = 0;
         this.selectedIndex = null;
 
-        // Get filtered count (respecting viewport bbox if coverings available)
         this.setStatus('Counting filtered rows...');
         this.filteredCount = await queryCount(
           this.source,
@@ -497,7 +500,6 @@ export default {
           this.sourceCrsString
         );
 
-        // Load first page with filters
         this.setStatus('Loading filtered data...');
         await this.executeQuery(0);
 
@@ -513,8 +515,6 @@ export default {
 
     /**
      * Execute query, append results to rows/features.
-     * @param {number} offset - Starting row offset
-     * @param {number|null} limit - Max rows (null = unlimited)
      */
     async executeQuery(offset, limit = this.pageSize) {
       const result = await queryData(this.source, {
@@ -542,14 +542,20 @@ export default {
         const row = { __index: globalIndex };
         for (const name of fieldNames) {
           if (name === '__geojson') continue;
-          // Always skip geometry columns in table data
           if (this.geoColumns.includes(name)) continue;
           const val = arrowRow[name];
-          // Convert special types to plain values
           if (typeof val === 'bigint') {
             row[name] = Number(val);
           } else if (ArrayBuffer.isView(val)) {
             row[name] = `[binary ${val.byteLength}B]`;
+          } else if (val instanceof Date) {
+            row[name] = val.toISOString();
+          } else if (val !== null && val !== undefined && typeof val === 'object') {
+            try {
+              row[name] = JSON.stringify(val);
+            } catch {
+              row[name] = String(val);
+            }
           } else {
             row[name] = val;
           }
@@ -563,15 +569,12 @@ export default {
             if (hasSpatial && arrowRow.__geojson) {
               geometry = JSON.parse(arrowRow.__geojson);
             } else if (!this.needsReprojection && arrowRow[geoCol]) {
-              // Fallback: parse WKB from raw binary (only for WGS 84 data;
-              // non-4326 CRS requires ST_Transform which needs the spatial extension)
               const wkb = arrowRow[geoCol];
               if (wkb instanceof Uint8Array || ArrayBuffer.isView(wkb)) {
                 geometry = wkbToGeoJSON(wkb);
               }
             }
           } catch (e) {
-            // Skip features with unparseable geometry
             console.warn(`Skipped geometry at row ${globalIndex}:`, e.message);
           }
 
@@ -585,7 +588,6 @@ export default {
         }
       }
 
-      // Append to existing data
       this.rows = [...this.rows, ...newRows];
       this.features = [...this.features, ...newFeatures];
       this.currentOffset = offset + arrowRows.length;
@@ -593,7 +595,6 @@ export default {
 
       // Calculate bounds from features if this is the first load
       if (offset === 0 && this.features.length > 0) {
-        // Prefer GeoParquet metadata bbox (only if in WGS 84 / no reprojection needed)
         const geoColMeta = this.geoMetadata?.columns?.[geoCol];
         if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
           const [minx, miny, maxx, maxy] = geoColMeta.bbox;
@@ -602,7 +603,6 @@ export default {
             [maxx, maxy]
           ];
         } else {
-          // Compute bounds from (already reprojected) GeoJSON features
           this.mapBounds = computeBounds(this.features);
         }
       }
@@ -611,7 +611,6 @@ export default {
     // ── Selection sync ────────────────────────────────────
     onTableSelect(index) {
       this.selectedIndex = index;
-      // Zoom map to feature
       if (this.$refs.mapView) {
         this.$refs.mapView.zoomToFeature(index);
       }
@@ -619,7 +618,6 @@ export default {
 
     onMapSelect(index) {
       this.selectedIndex = index;
-      // TableView will auto-scroll via its watcher
     },
 
     // ── Viewport-driven spatial filtering ──────────────────
@@ -645,12 +643,9 @@ export default {
         this.setStatus('Loading data in viewport...');
         await this.executeQuery(0);
 
-        // Abort if a newer viewport change has occurred
         if (gen !== this.viewportGeneration) return;
 
-        this.setStatus(
-          `Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`
-        );
+        this.setStatus(`Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`);
       } catch (e) {
         if (gen === this.viewportGeneration) {
           this.setStatus(`Error: ${e.message}`, true);
@@ -663,246 +658,38 @@ export default {
 };
 </script>
 
-<style lang="scss">
-@import 'maplibre-gl/dist/maplibre-gl.css';
-
-* {
-  box-sizing: border-box;
-}
-html,
-body,
-#app,
-#viewer {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  overflow: hidden;
-}
-#viewer {
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Buttons ─────────────────────────────────────────── */
-.btn {
-  padding: 4px 10px;
-  font-size: 0.8rem;
-  border: 1px solid #999;
-  border-radius: 3px;
-  background: #f0f0f0;
-  cursor: pointer;
-  white-space: nowrap;
-  &:hover {
-    background: #e0e0e0;
-  }
-  &:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-}
-.btn-sm {
-  padding: 2px 8px;
-  font-size: 0.75rem;
-}
-.btn-primary {
-  background: #1976d2;
-  color: white;
-  border-color: #1565c0;
-  &:hover {
-    background: #1565c0;
-  }
-}
-.btn-danger {
-  background: #d32f2f;
-  color: white;
-  border-color: #c62828;
-  &:hover {
-    background: #c62828;
-  }
-}
-
-/* ── Header ──────────────────────────────────────────── */
-#header {
-  background: #333;
-  color: #fff;
-  flex-shrink: 0;
-
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0 0.6rem;
-  }
-
-  .header-row {
-    height: 2.2rem;
-  }
-
-  .title {
-    margin: 0;
-    font-size: 1.1rem;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 0.3rem;
-    .btn {
-      background: #555;
-      color: white;
-      border-color: #666;
-      &:hover {
-        background: #666;
-      }
-    }
-  }
-
-  .sub-header {
-    height: 1.8rem;
-    background: #555;
-    font-size: 0.8rem;
-    justify-content: space-between;
-
-    code {
-      font-size: 0.78rem;
-    }
-    .row-counts {
-      white-space: nowrap;
-      color: #ccc;
-    }
-  }
-}
-
-/* ── Main layout ─────────────────────────────────────── */
-#main {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-
-#left-panel {
+<style>
+.left-panel {
   width: 50%;
   min-width: 300px;
-  display: flex;
-  flex-direction: column;
   border-right: 2px solid #ccc;
 }
-
-#right-panel {
+.right-panel {
   flex: 1;
   min-width: 300px;
 }
-
-.load-more-bar {
-  padding: 6px;
-  text-align: center;
-  border-top: 1px solid #ddd;
-  background: #f8f8f8;
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-}
-
-/* ── Welcome screen ──────────────────────────────────── */
-.welcome {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  color: #555;
-  text-align: center;
-  padding: 2rem;
-
-  h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1.5rem;
-  }
-  p {
-    margin: 0.3em 0;
-    max-width: 500px;
-    line-height: 1.5;
-  }
-  .btn {
-    margin-top: 1rem;
-    font-size: 1rem;
-    padding: 8px 20px;
-  }
-}
-
-/* ── Status bar ──────────────────────────────────────── */
 .status-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 1.5rem;
-  background: #333;
-  color: #ccc;
-  font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  padding: 0 0.6rem;
+  height: 24px;
   z-index: 500;
-
-  &.error {
-    background: #c62828;
-    color: white;
-  }
 }
 
-/* (LoadingSpinner is self-contained via scoped styles) */
-
-/* ── Forms (used by modals) ──────────────────────────── */
-form {
-  .row {
-    display: flex;
-    margin: 0.25em 0;
-  }
-  label {
-    width: 30%;
-    display: flex;
-    align-items: center;
-  }
-  .input {
-    flex-grow: 1;
-    display: flex;
-  }
-  .input input {
-    flex-grow: 1;
-  }
-  input {
-    padding: 0.3em;
-  }
-  input,
-  button {
-    margin: 3px;
-  }
-}
-
-/* ── Responsive ──────────────────────────────────────── */
 @media (max-width: 768px) {
-  #main {
-    flex-direction: column;
+  .content-panels {
+    flex-direction: column !important;
   }
-  #left-panel {
-    width: 100%;
+  .left-panel {
+    width: 100% !important;
     height: 50%;
-    border-right: none;
+    border-right: none !important;
     border-bottom: 2px solid #ccc;
   }
-  #right-panel {
+  .right-panel {
     height: 50%;
-    min-width: unset;
+    min-width: unset !important;
   }
 }
 </style>

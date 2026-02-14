@@ -1,45 +1,60 @@
 <template>
-  <div class="filter-panel">
-    <div class="filter-header">
-      <span class="filter-title">Filters</span>
-      <button class="btn btn-sm" @click="addFilter" title="Add filter">+ Add</button>
-      <button
+  <div class="pa-2 bg-grey-lighten-4" style="border-bottom: 1px solid #ddd">
+    <div class="d-flex align-center ga-2">
+      <span class="text-body-2 font-weight-bold">Filters</span>
+      <v-btn size="x-small" variant="tonal" prepend-icon="mdi-plus" @click="addFilter">
+        Add
+      </v-btn>
+      <v-btn
         v-if="localFilters.length > 0"
-        class="btn btn-sm btn-danger"
+        size="x-small"
+        variant="tonal"
+        color="error"
         @click="clearFilters"
-        title="Clear all filters"
       >
         Clear
-      </button>
+      </v-btn>
     </div>
-    <div v-if="localFilters.length > 0" class="filter-rows">
-      <div v-for="(filter, i) in localFilters" :key="i" class="filter-row">
-        <select v-model="filter.column" class="filter-select filter-column">
-          <option value="" disabled>Column...</option>
-          <option v-for="col in columns" :key="col.name" :value="col.name">
-            {{ col.name }}
-          </option>
-        </select>
-        <select v-model="filter.operator" class="filter-select filter-operator">
-          <option v-for="op in operators" :key="op.value" :value="op.value">
-            {{ op.label }}
-          </option>
-        </select>
-        <input
+    <template v-if="localFilters.length > 0">
+      <div v-for="(filter, i) in localFilters" :key="i" class="d-flex align-center ga-1 mt-1">
+        <v-select
+          v-model="filter.column"
+          :items="columnNames"
+          density="compact"
+          variant="outlined"
+          hide-details
+          style="max-width: 180px"
+          placeholder="Column..."
+        />
+        <v-select
+          v-model="filter.operator"
+          :items="operators"
+          item-title="label"
+          item-value="value"
+          density="compact"
+          variant="outlined"
+          hide-details
+          style="width: 110px; flex: 0 0 110px"
+        />
+        <v-text-field
           v-if="!noValueOperators.includes(filter.operator)"
           v-model="filter.value"
-          class="filter-input"
+          density="compact"
+          variant="outlined"
+          hide-details
           placeholder="Value..."
           @keydown.enter="apply"
         />
-        <button class="btn btn-sm btn-icon" @click="removeFilter(i)" title="Remove filter">
-          &times;
-        </button>
+        <v-btn icon size="x-small" variant="text" @click="removeFilter(i)">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
       </div>
-      <div class="filter-actions">
-        <button class="btn btn-sm btn-primary" @click="apply">Apply Filters</button>
+      <div class="mt-1">
+        <v-btn size="x-small" color="primary" variant="flat" @click="apply">
+          Apply Filters
+        </v-btn>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -71,6 +86,11 @@ export default {
       operators: OPERATORS,
       noValueOperators: NO_VALUE_OPS
     };
+  },
+  computed: {
+    columnNames() {
+      return this.columns.map((col) => col.name);
+    }
   },
   watch: {
     filters: {
@@ -107,65 +127,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.filter-panel {
-  border-bottom: 1px solid #ddd;
-  background: #f8f8f8;
-  padding: 6px 8px;
-  font-size: 0.8rem;
-}
-.filter-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.filter-title {
-  font-weight: 600;
-  margin-right: 4px;
-}
-.filter-rows {
-  margin-top: 6px;
-}
-.filter-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-.filter-select {
-  padding: 3px 4px;
-  font-size: 0.78rem;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  background: white;
-}
-.filter-column {
-  min-width: 100px;
-  max-width: 180px;
-}
-.filter-operator {
-  width: 90px;
-}
-.filter-input {
-  flex: 1;
-  padding: 3px 6px;
-  font-size: 0.78rem;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  min-width: 60px;
-}
-.filter-actions {
-  margin-top: 4px;
-}
-.btn-icon {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  line-height: 1;
-}
-</style>

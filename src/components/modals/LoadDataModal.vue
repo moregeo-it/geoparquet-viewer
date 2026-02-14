@@ -1,69 +1,96 @@
 <template>
-  <BaseModal width="50%" title="Load Data" @submit="submit">
-    <h3>From URL</h3>
-    <div class="form-row">
-      <label for="load-url">URL:</label>
-      <div class="input">
-        <input id="load-url" v-model="newUrl" placeholder="https://example.com/data.parquet" />
-      </div>
-    </div>
+  <v-dialog
+    :model-value="modelValue"
+    @update:model-value="$emit('update:modelValue', $event)"
+    max-width="600"
+  >
+    <v-card>
+      <v-card-title>Load Data</v-card-title>
+      <v-card-text>
+        <h3 class="text-subtitle-1 font-weight-bold mb-2">From URL</h3>
+        <v-text-field
+          v-model="newUrl"
+          label="URL"
+          placeholder="https://example.com/data.parquet"
+          density="compact"
+          variant="outlined"
+          hide-details
+          @keydown.enter="submit"
+        />
 
-    <h3>From local file</h3>
-    <div class="form-row">
-      <label for="load-file">File:</label>
-      <div class="input">
-        <input id="load-file" type="file" accept=".parquet,.geoparquet" @change="onFileSelect" />
-      </div>
-    </div>
+        <h3 class="text-subtitle-1 font-weight-bold mt-4 mb-2">From local file</h3>
+        <v-file-input
+          label="File"
+          accept=".parquet,.geoparquet"
+          density="compact"
+          variant="outlined"
+          hide-details
+          prepend-icon=""
+          prepend-inner-icon="mdi-file"
+          @update:model-value="onFileSelect"
+        />
 
-    <hr />
+        <v-divider class="my-4" />
 
-    <h3>Examples</h3>
-    <ul class="examples">
-      <li v-for="(title, url) in examples" :key="url">
-        <a :href="url" @click.prevent="selectExample(url)">{{ title }}</a>
-      </li>
-    </ul>
-  </BaseModal>
+        <h3 class="text-subtitle-1 font-weight-bold mb-2">Examples</h3>
+        <v-list density="compact" class="pa-0">
+          <v-list-item
+            v-for="example in exampleList"
+            :key="example.url"
+            :title="example.title"
+            prepend-icon="mdi-file-document-outline"
+            @click="selectExample(example.url)"
+          />
+        </v-list>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="$emit('update:modelValue', false)">Cancel</v-btn>
+        <v-btn color="primary" variant="flat" @click="submit">Load</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
-import BaseModal from './BaseModal.vue';
-
 export default {
   name: 'LoadDataModal',
-  components: {
-    BaseModal
-  },
   props: {
-    url: {
-      type: String,
-      default: ''
-    }
+    modelValue: { type: Boolean, default: false },
+    url: { type: String, default: '' }
   },
-  emits: ['save', 'loadFile', 'close'],
+  emits: ['update:modelValue', 'save', 'loadFile'],
   data() {
     return {
       newUrl: '',
       selectedFile: null,
-      examples: {
-        'https://raw.githubusercontent.com/visgl/loaders.gl/master/modules/parquet/test/data/geoparquet/airports.parquet':
-          'Airports (small, points)',
-        'https://data.source.coop/fiboa/ai4sf/ai4sf.parquet':
-          'Field boundaries Cambodia/Vietnam (medium, polygons)'
-      }
+      exampleList: [
+        {
+          url: 'https://raw.githubusercontent.com/visgl/loaders.gl/master/modules/parquet/test/data/geoparquet/airports.parquet',
+          title: 'Airports (small, points)'
+        },
+        {
+          url: 'https://data.source.coop/fiboa/ai4sf/ai4sf.parquet',
+          title: 'Field boundaries Cambodia/Vietnam (medium, polygons)'
+        }
+      ]
     };
   },
-  created() {
-    this.newUrl = this.url || '';
+  watch: {
+    modelValue(open) {
+      if (open) {
+        this.newUrl = this.url || '';
+        this.selectedFile = null;
+      }
+    }
   },
   methods: {
     selectExample(url) {
       this.newUrl = url;
       this.selectedFile = null;
     },
-    onFileSelect(event) {
-      const file = event.target.files[0];
+    onFileSelect(files) {
+      const file = Array.isArray(files) ? files[0] : files;
       if (file) {
         this.selectedFile = file;
         this.newUrl = '';
@@ -75,48 +102,8 @@ export default {
       } else if (this.newUrl) {
         this.$emit('save', this.newUrl);
       }
-      this.$emit('close');
+      this.$emit('update:modelValue', false);
     }
   }
 };
 </script>
-
-<style scoped>
-h3 {
-  margin: 0.8em 0 0.4em;
-  font-size: 1rem;
-}
-h3:first-child {
-  margin-top: 0;
-}
-.form-row {
-  display: flex;
-  margin: 0.25em 0;
-}
-.form-row label {
-  width: 4rem;
-  display: flex;
-  align-items: center;
-  font-size: 0.9rem;
-}
-.form-row .input {
-  flex: 1;
-}
-.form-row .input input {
-  width: 100%;
-  padding: 0.4em;
-  box-sizing: border-box;
-}
-.examples {
-  margin: 0.3em 0;
-  padding-left: 1.5em;
-}
-.examples li {
-  margin-bottom: 0.3em;
-}
-hr {
-  border: none;
-  border-top: 1px solid #ddd;
-  margin: 1em 0;
-}
-</style>
