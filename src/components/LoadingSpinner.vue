@@ -1,5 +1,7 @@
 <template>
-  <div class="spinner"></div>
+  <div class="loading-bar" aria-label="Loading">
+    <div class="loading-bar-track"></div>
+  </div>
 </template>
 
 <script>
@@ -8,45 +10,30 @@ export default {
 };
 </script>
 
-<style lang="scss">
-.spinner,
-.spinner:after {
-  border-radius: 50%;
-  width: 70%;
-  height: 70%;
+<style scoped>
+.loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.1);
 }
-.spinner {
-  font-size: 10px;
-  position: relative;
-  text-indent: -9999em;
-  border-top: 1.1em solid rgba(255, 255, 255, 0.2);
-  border-right: 1.1em solid rgba(255, 255, 255, 0.2);
-  border-bottom: 1.1em solid rgba(255, 255, 255, 0.2);
-  border-left: 1.1em solid #ffffff;
-  -webkit-transform: translateZ(0);
-  -ms-transform: translateZ(0);
-  transform: translateZ(0);
-  -webkit-animation: load8 1.1s infinite linear;
-  animation: load8 1.1s infinite linear;
+.loading-bar-track {
+  height: 100%;
+  width: 40%;
+  background: #1976d2;
+  border-radius: 0 2px 2px 0;
+  animation: loadSlide 1.2s ease-in-out infinite;
 }
-@-webkit-keyframes load8 {
+@keyframes loadSlide {
   0% {
-    -webkit-transform: rotate(0deg);
-    transform: rotate(0deg);
+    transform: translateX(-100%);
   }
   100% {
-    -webkit-transform: rotate(360deg);
-    transform: rotate(360deg);
-  }
-}
-@keyframes load8 {
-  0% {
-    -webkit-transform: rotate(0deg);
-    transform: rotate(0deg);
-  }
-  100% {
-    -webkit-transform: rotate(360deg);
-    transform: rotate(360deg);
+    transform: translateX(350%);
   }
 }
 </style>

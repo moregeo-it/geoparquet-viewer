@@ -10,11 +10,11 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "hyparquet": "~1.10.0",
-    "hyparquet-compressors": "~1.1.1",
-    "hysnappy": "~1.0.0",
-    "ol": "~10.6.1",
-    "proj4": "~2.19.10",
+    "@deck.gl/core": "^9.1.0",
+    "@deck.gl/layers": "^9.1.0",
+    "@deck.gl/mapbox": "^9.1.0",
+    "@duckdb/duckdb-wasm": "^1.29.0",
+    "maplibre-gl": "^4.7.0",
     "vue": "^3.5.22"
   },
   "devDependencies": {
@@ -26,7 +26,6 @@
     "globals": "^16.3.0",
     "prettier": "3.6.2",
     "sass": "^1.77.0",
-    "vite": "^7.1.7",
-    "vite-plugin-vue-devtools": "^8.0.2"
+    "vite": "^7.1.7"
   }
 }

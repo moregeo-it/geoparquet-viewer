@@ -1,61 +1,86 @@
 <template>
   <div id="viewer">
     <header id="header">
-      <div class="row">
-        <h1 class="title">GeoParquet Viewer (experimental)</h1>
-        <button @click="showLoad">Load Data</button>
-        <button @click="showAbout">About</button>
+      <div class="row header-row">
+        <h1 class="title">GeoParquet Viewer</h1>
+        <div class="header-actions">
+          <button @click="showLoad" class="btn">Load Data</button>
+          <button v-if="schema" @click="showSchemaModal" class="btn">Schema</button>
+          <button v-if="kvMetadata" @click="showKvMetadata" class="btn">KV Metadata</button>
+          <button v-if="geoMetadata" @click="showGeoMetadata" class="btn">Geo Metadata</button>
+          <button v-if="fileMetadata" @click="showFileMetadata" class="btn">File Info</button>
+          <button @click="showAboutModal" class="btn">About</button>
+        </div>
       </div>
-      <div class="row subheader">
-        <span class="title">
-          <code>{{ this.url }}</code>
-          &nbsp;
-          <span class="counts"
-            >( {{ loadedNumRows }} /
-            <template v-if="totalNumRows >= 0">{{ totalNumRows }}</template>
-            <template v-else>?</template>
-            rows
-            <button v-if="!loading && !isComplete" @click="loadMore">Load more...</button>
-            )</span
-          >
+      <div v-if="source" class="row sub-header">
+        <span class="source-info">
+          <code>{{ displaySource }}</code>
         </span>
-        <button v-if="metadata" @click="showMetadata">Parquet Metadata</button>
-        <button v-if="geoMetadata" @click="showGeoMetadata">GeoParquet Metadata</button>
+        <span class="row-counts">
+          <template v-if="filteredCount !== null && filteredCount !== totalRows">
+            {{ filteredCount.toLocaleString() }} matched &middot;
+          </template>
+          {{ loadedCount.toLocaleString() }} loaded /
+          {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
+        </span>
       </div>
     </header>
+
     <main id="main">
-      <section v-if="data.length === 0" id="error-container">
-        <p v-if="loading">Data is loading...</p>
-        <p v-else>No data available!</p>
-      </section>
-      <section v-else id="table-container">
-        <table id="table">
-          <thead>
-            <tr>
-              <th v-for="column of shownColumns" :key="column">{{ column }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="i of rowIndices"
-              :key="i"
-              @click="selectOnMap(i)"
-              :id="`row_${i}`"
-              :class="{ highlight: i === selected }"
+      <template v-if="source">
+        <div id="left-panel">
+          <FilterPanel
+            v-if="nonGeoColumns.length > 0"
+            :columns="nonGeoColumns"
+            :filters="filters"
+            @apply="applyFilters"
+          />
+          <TableView
+            :rows="rows"
+            :columns="nonGeoColumns"
+            :selectedIndex="selectedIndex"
+            @select="onTableSelect"
+          />
+          <div v-if="hasMore" class="load-more-bar">
+            <button @click="loadMore" :disabled="loading" class="btn btn-sm">
+              Load more ({{ pageSize.toLocaleString() }} rows)
+            </button>
+            <button
+              v-if="remainingRows > pageSize"
+              @click="loadAll"
+              :disabled="loading"
+              class="btn btn-sm"
             >
-              <td v-for="column of shownColumns" :key="`cell_${column}_${i}`">
-                <div>{{ data[column][i] }}</div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-if="!loading && !isComplete" class="loadmore">
-          <button @click="loadMore">Load more...</button>&nbsp;
-          <button @click="loadAll">Load all...</button>
+              Load all remaining
+            </button>
+          </div>
         </div>
-      </section>
-      <section id="map-container"><div id="map"></div></section>
+        <div id="right-panel">
+          <MapView
+            ref="mapView"
+            :features="features"
+            :selectedIndex="selectedIndex"
+            :bounds="mapBounds"
+            @select="onMapSelect"
+            @viewportChange="onViewportChange"
+          />
+        </div>
+      </template>
+      <div v-else class="welcome">
+        <h2>GeoParquet Viewer</h2>
+        <p>
+          Load a <a href="https://geoparquet.org" target="_blank">GeoParquet</a> file to visualize
+          it on a map and explore the data in a table.
+        </p>
+        <p>Supports local files and remote URLs with HTTP range requests.</p>
+        <button @click="showLoad" class="btn btn-primary">Load Data</button>
+      </div>
     </main>
+
+    <div v-if="statusMessage" class="status-bar" :class="{ error: isError }">
+      {{ statusMessage }}
+    </div>
+
     <template v-for="modal in modals" :key="modal.id">
       <component
         :is="modal.component"
@@ -64,169 +89,198 @@
         @close="hideModal(modal)"
       />
     </template>
-    <span v-if="loading" id="loading"><LoadingSpinner /></span>
+
+    <LoadingSpinner v-if="loading" />
   </div>
 </template>
 
 <script>
-import { parquetRead, parquetMetadataAsync, parquetSchema, toJson } from 'hyparquet';
-import { compressors as hycompressors } from 'hyparquet-compressors';
-import { snappyUncompressor } from 'hysnappy';
-
-import WKB from 'ol/format/WKB.js';
-import Map from 'ol/Map.js';
-import View from 'ol/View.js';
-import Select from 'ol/interaction/Select.js';
-import { OSM, Vector as VectorSource } from 'ol/source.js';
-import { Tile as TileLayer, Vector as VectorLayer } from 'ol/layer.js';
-import proj4 from 'proj4';
-import { register } from 'ol/proj/proj4.js';
-import { getStyle } from './map.js';
-
+import {
+  initDB,
+  isSpatialLoaded,
+  registerLocalFile,
+  dropFile,
+  getSchema,
+  getRowCount,
+  getKVMetadata,
+  getParquetFileMetadata,
+  queryData,
+  queryCount
+} from './db.js';
+import { wkbToGeoJSON, computeBounds } from './wkb.js';
 import Utils from './utils.js';
 
+import MapView from './components/MapView.vue';
+import TableView from './components/TableView.vue';
+import FilterPanel from './components/FilterPanel.vue';
 import LoadingSpinner from './components/LoadingSpinner.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
 import MetadataModal from './components/modals/MetadataModal.vue';
+import SchemaModal from './components/modals/SchemaModal.vue';
 
-const compressors = {
-  ...hycompressors,
-  snappy: snappyUncompressor()
-};
-
-// Todo: Ugly hack to change the default rendering of Date objects
-Date.prototype.toString = Date.prototype.toISOString;
-
-function getDefaults() {
-  return {
-    data: {},
-    columns: [],
-    offset: 0,
-    pageSize: 100,
-    fileSize: null,
-    metadata: null,
-    loading: false,
-    selected: null,
-    modals: []
-  };
-}
+const DEFAULT_PAGE_SIZE = 5000;
+const MAX_FEATURES_ON_MAP = 100000;
 
 function getDefaultUrl() {
   const urlParams = new URLSearchParams(window.location.search);
-  const url = urlParams.get('url');
-  if (url) {
-    return url;
-  } else {
-    return null;
-  }
+  return urlParams.get('url') || null;
 }
 
 export default {
   name: 'App',
   components: {
+    MapView,
+    TableView,
+    FilterPanel,
+    LoadingSpinner,
     AboutModal,
     LoadDataModal,
     MetadataModal,
-    LoadingSpinner
+    SchemaModal
   },
   data() {
-    return Object.assign(
-      {
-        source: new VectorSource(),
-        map: null,
-        url: null,
-        defaultStyle: getStyle(),
-        selectStyle: getStyle('#FF0000')
-      },
-      getDefaults()
-    );
+    return {
+      // Source
+      source: null, // DuckDB source path (URL or registered filename)
+      displaySource: '', // Human-readable source name
+      localFileName: null, // Registered local file name
+
+      // Schema & metadata
+      schema: null,
+      kvMetadata: null,
+      geoMetadata: null,
+      fileMetadata: null,
+      totalRows: -1,
+
+      // Data
+      rows: [],
+      features: [],
+      mapBounds: null,
+
+      // Selection
+      selectedIndex: null,
+
+      // Filters
+      filters: [],
+      filteredCount: null,
+
+      // Pagination
+      pageSize: DEFAULT_PAGE_SIZE,
+      currentOffset: 0,
+      lastPageFull: false,
+
+      // Viewport
+      viewportBounds: null,
+      pendingViewportReload: false,
+      viewportGeneration: 0,
+
+      // UI state
+      loading: false,
+      statusMessage: '',
+      isError: false,
+      modals: []
+    };
   },
   computed: {
-    asyncBuffer() {
-      return {
-        byteLength: this.fileSize,
-        slice: async (start, end) => {
-          const rangeEnd = end === undefined ? '' : end - 1;
-          const res = await fetch(this.url, {
-            headers: {
-              Range: `bytes=${start}-${rangeEnd}`
-            }
-          });
-          return res.arrayBuffer();
-        }
-      };
-    },
-    loadedNumRows() {
-      const keys = Object.keys(this.data);
-      if (keys.length > 0 && Array.isArray(this.data[keys[0]])) {
-        return this.data[keys[0]].length;
-      }
-      return 0;
-    },
-    rowIndices() {
-      return Array.from({ length: this.loadedNumRows }, (_, i) => i);
-    },
-    totalNumRows() {
-      return this.metadata?.num_rows;
-    },
-    isComplete() {
-      return this.loadedNumRows >= 0 && this.loadedNumRows >= this.totalNumRows;
-    },
-    geoMetadata() {
-      const geo = this.metadata?.key_value_metadata?.find((md) => md.key === 'geo');
-      if (geo && geo.value) {
-        return JSON.parse(geo.value);
-      }
-      return null;
-    },
+    /** The primary geometry column name from GeoParquet metadata or schema detection */
     primaryGeoColumn() {
-      if (this.geoMetadata) {
-        return this.geoMetadata.columns[this.geoMetadata.primary_column];
-      }
-      return {};
+      if (this.geoMetadata?.primary_column) return this.geoMetadata.primary_column;
+      // Fallback: detect geometry column from schema type
+      return this.detectedGeoColumn;
     },
-    schema() {
-      if (this.metadata) {
-        return parquetSchema(this.metadata);
+    /** Detected geometry column from schema (fallback when no geo metadata) */
+    detectedGeoColumn() {
+      if (!this.schema) return null;
+      const geoTypes = ['GEOMETRY', 'BLOB', 'WKB_GEOMETRY', 'BYTEA'];
+      const geoNames = ['geometry', 'geom', 'wkb_geometry', 'the_geom', 'shape'];
+      // First try matching known geometry column names
+      for (const col of this.schema) {
+        if (geoNames.includes(col.name.toLowerCase())) return col.name;
+      }
+      // Then try matching geometry types
+      for (const col of this.schema) {
+        if (geoTypes.includes(col.type.toUpperCase())) return col.name;
       }
       return null;
     },
-    columnsInSchema() {
-      if (this.schema) {
-        return this.schema.children.map((child) => child.element.name);
-      }
+    /** CRS object for the primary geometry column (null = WGS 84 per GeoParquet spec) */
+    primaryGeoCrs() {
+      if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return null;
+      const colMeta = this.geoMetadata.columns[this.primaryGeoColumn];
+      return colMeta?.crs ?? null; // absent/null = WGS 84 per spec
+    },
+    /** Whether geometry needs reprojection to WGS 84 for display */
+    needsReprojection() {
+      const crs = this.primaryGeoCrs;
+      if (!crs) return false; // null/absent CRS = WGS 84
+      // Already EPSG:4326
+      if (crs.id?.authority === 'EPSG' && crs.id?.code === 4326) return false;
+      return true;
+    },
+    /**
+     * Source CRS string for ST_Transform.
+     * Always passes the full PROJJSON from GeoParquet metadata instead of EPSG codes,
+     * because DuckDB-WASM's spatial extension doesn't ship the PROJ database needed
+     * for EPSG code lookups (crashes with _setThrew). PROJ can parse PROJJSON directly.
+     * null when no reprojection is needed.
+     */
+    sourceCrsString() {
+      if (!this.needsReprojection) return null;
+      return JSON.stringify(this.primaryGeoCrs);
+    },
+    /** Whether the primary geo column has covering/bbox metadata (enables efficient spatial filtering) */
+    hasBboxCovering() {
+      if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return false;
+      const colMeta = this.geoMetadata.columns[this.primaryGeoColumn];
+      return !!(colMeta?.covering?.bbox);
+    },
+    /** All geometry column names */
+    geoColumns() {
+      if (this.geoMetadata?.columns) return Object.keys(this.geoMetadata.columns);
+      // Fallback: just the detected column
+      if (this.detectedGeoColumn) return [this.detectedGeoColumn];
       return [];
     },
-    shownColumns() {
-      return this.columns.filter((column) => !(column in this.geoMetadata.columns));
+    /** Columns to show in the table (exclude geometry columns and internal fields) */
+    nonGeoColumns() {
+      if (!this.schema) return [];
+      return this.schema.filter(
+        (col) => !this.geoColumns.includes(col.name) && !col.name.startsWith('__')
+      );
     },
-    crs() {
-      const crs = this.primaryGeoColumn.crs;
-      if (crs && crs.id) {
-        return `${crs.id.authority}:${crs.id.code}`;
+    /** Number of rows currently loaded */
+    loadedCount() {
+      return this.rows.length;
+    },
+    /** Whether there are more rows to load */
+    hasMore() {
+      // When viewport-filtered without an explicit count, use page fullness
+      if (this.hasBboxCovering && this.viewportBounds && this.filteredCount === null) {
+        return this.lastPageFull;
       }
-      return 'EPSG:4326';
-    }
-  },
-  watch: {
-    url() {
-      history.pushState({}, '', `?url=${this.url}`);
-      this.load();
+      if (this.filteredCount !== null) {
+        return this.loadedCount < this.filteredCount;
+      }
+      return this.totalRows >= 0 && this.loadedCount < this.totalRows;
+    },
+    /** Remaining rows that can be loaded */
+    remainingRows() {
+      const total = this.filteredCount !== null ? this.filteredCount : this.totalRows;
+      return Math.max(0, total - this.loadedCount);
     }
   },
   mounted() {
-    this.url = getDefaultUrl();
-    this.createMap();
-    if (this.url) {
-      this.load();
-    }
-    else {
+    const url = getDefaultUrl();
+    if (url) {
+      this.loadFromUrl(url);
+    } else {
       this.showLoad();
     }
   },
   methods: {
+    // ── Modal management ──────────────────────────────────
     showModal(component, props = {}, events = {}, id = null) {
       this.modals.push({
         component,
@@ -236,219 +290,385 @@ export default {
       });
     },
     hideModal(modal) {
-      let id = Utils.isObject(modal) ? modal.id : modal;
-      let index = this.modals.findIndex((other) => other.id === id);
-      if (typeof index !== 'undefined') {
-        this.modals.splice(index, 1);
-      }
+      const id = Utils.isObject(modal) ? modal.id : modal;
+      const index = this.modals.findIndex((m) => m.id === id);
+      if (index >= 0) this.modals.splice(index, 1);
     },
-    showAbout() {
+    showAboutModal() {
       this.showModal('AboutModal');
     },
     showLoad() {
       this.showModal(
         'LoadDataModal',
-        { url: this.url },
+        { url: this.source || '' },
         {
-          save: (url) => {
-            this.url = url;
-          }
+          save: (url) => this.loadFromUrl(url),
+          loadFile: (file) => this.loadFromFile(file)
         }
       );
     },
+    showSchemaModal() {
+      this.showModal('SchemaModal', {
+        schema: this.schema,
+        geoMetadata: this.geoMetadata
+      });
+    },
+    showKvMetadata() {
+      this.showModal('MetadataModal', {
+        title: 'Key-Value Metadata',
+        data: this.kvMetadata
+      });
+    },
     showGeoMetadata() {
-      this.showModal('MetadataModal', { data: this.geoMetadata });
+      this.showModal('MetadataModal', {
+        title: 'GeoParquet Metadata',
+        data: this.geoMetadata
+      });
     },
-    showMetadata() {
-      this.showModal('MetadataModal', { data: toJson(this.metadata) });
+    showFileMetadata() {
+      this.showModal('MetadataModal', {
+        title: 'Parquet File Metadata',
+        data: this.fileMetadata
+      });
     },
-    unselectFeature() {
-      if (this.selected === null) {
-        return;
-      }
-      this.setFeatureStyle(this.selected, this.defaultStyle);
-    },
-    selectFeature() {
-      if (this.selected === null) {
-        return;
-      }
-      const feature = this.setFeatureStyle(this.selected, this.selectStyle);
-      const geometry = feature.getGeometry();
-      const type = geometry.getType();
-      let fitOpts;
-      if (type === 'Point') {
-        fitOpts = { minResolution: 1000 };
-      } else {
-        fitOpts = { padding: [100, 100, 100, 100] };
-      }
-      this.map.getView().fit(geometry.getExtent(), fitOpts);
-    },
-    setFeatureStyle(id, style) {
-      const feature = this.source.getFeatureById(id);
-      if (!feature) {
-        return;
-      }
-      feature.setStyle(style);
-      return feature;
-    },
-    select(i) {
-      this.unselectFeature();
-      this.selected = i;
-    },
-    selectOnMap(i) {
-      this.select(i);
-      this.selectFeature('#FF0000');
-    },
-    selectInTable(i) {
-      this.select(i);
-      document.getElementById(`row_${i}`).scrollIntoView({ block: 'center' });
-    },
-    reset() {
-      const defaults = getDefaults();
-      for (const key in defaults) {
-        this[key] = defaults[key];
-      }
-      this.source.clear();
-    },
-    async discover() {
-      try {
-        const head = await fetch(this.url, { method: 'HEAD' });
-        if (!head.ok) {
-          throw new Error(`Error (${head.status}) fetching file: ${head.statusText}`);
-        }
-        const size = head.headers.get('content-length');
-        if (!size) {
-          throw new Error('No content-length header returned by server');
-        }
-        this.fileSize = Number(size);
-        this.metadata = await parquetMetadataAsync(this.asyncBuffer);
-        if (this.columns.length === 0) {
-          this.columns = this.columnsInSchema;
-        }
-      } catch (error) {
-        this.showError(error.message);
+
+    // ── Status ────────────────────────────────────────────
+    setStatus(msg, error = false) {
+      this.statusMessage = msg;
+      this.isError = error;
+      if (!error && msg) {
+        setTimeout(() => {
+          if (this.statusMessage === msg) this.statusMessage = '';
+        }, 5000);
       }
     },
-    async load() {
+
+    // ── Data loading ──────────────────────────────────────
+    async loadFromUrl(url) {
+      // Update URL bar
+      history.pushState({}, '', `?url=${encodeURIComponent(url)}`);
       this.reset();
-      await this.loadMore();
+      this.source = url;
+      this.displaySource = url;
+      await this.loadData();
     },
-    async loadAll() {
-      this.pageSize = 0;
-      await this.loadMore();
-    },
-    async loadMore() {
-      if (this.isComplete) {
-        return;
+
+    async loadFromFile(file) {
+      history.pushState({}, '', window.location.pathname);
+      this.reset();
+      const name = 'local_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      this.setStatus(`Reading file ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...`);
+
+      try {
+        const buffer = await file.arrayBuffer();
+        await registerLocalFile(name, buffer);
+        this.localFileName = name;
+        this.source = name;
+        this.displaySource = file.name;
+        await this.loadData();
+      } catch (e) {
+        this.setStatus(`Failed to load file: ${e.message}`, true);
+        this.loading = false;
       }
+    },
+
+    reset() {
+      // Drop previously registered local file
+      if (this.localFileName) {
+        dropFile(this.localFileName).catch(() => {});
+      }
+      this.source = null;
+      this.displaySource = '';
+      this.localFileName = null;
+      this.schema = null;
+      this.kvMetadata = null;
+      this.geoMetadata = null;
+      this.fileMetadata = null;
+      this.totalRows = -1;
+      this.rows = [];
+      this.features = [];
+      this.mapBounds = null;
+      this.selectedIndex = null;
+      this.filters = [];
+      this.filteredCount = null;
+      this.currentOffset = 0;
+      this.isError = false;
+      this.statusMessage = '';
+    },
+
+    async loadData() {
       this.loading = true;
       try {
-        if (this.fileSize === null) {
-          await this.discover();
-        }
-        const rowStart = this.offset;
-        let rowEnd = undefined;
-        if (this.pageSize) {
-          rowEnd = this.offset + this.pageSize;
-        }
-        this.columnsInSchema.forEach((column) => {
-          if (!Array.isArray(this.data[column])) {
-            this.data[column] = [];
+        // Step 1: Initialize DuckDB
+        this.setStatus('Initializing DuckDB...');
+        await initDB((msg) => this.setStatus(msg));
+
+        // Step 2: Get schema
+        this.setStatus('Reading schema...');
+        this.schema = await getSchema(this.source);
+
+        // Step 3: Get row count
+        this.setStatus('Counting rows...');
+        this.totalRows = await getRowCount(this.source);
+
+        // Step 4: Get KV metadata (includes GeoParquet 'geo' key)
+        this.setStatus('Reading metadata...');
+        try {
+          this.kvMetadata = await getKVMetadata(this.source);
+          if (this.kvMetadata.geo && typeof this.kvMetadata.geo === 'object') {
+            this.geoMetadata = this.kvMetadata.geo;
           }
-        });
-        await parquetRead({
-          file: this.asyncBuffer,
-          metadata: this.metadata,
-          compressors,
-          columns: this.columns.length === 0 ? undefined : this.columns,
-          rowStart,
-          rowEnd,
-          utf8: false, // Don't convert binary data as UTF-8, otherwise we can't read the WKB properly
-          onChunk: ({ columnName, columnData }) => {
-            if (this.pageSize) {
-              columnData = columnData.slice(0, this.pageSize);
-            }
-            // todo: check what is faster:
-            columnData.forEach((x) => this.data[columnName].push(x));
-            // this.data[columnName] = this.data[columnName].concat(data);
-          }
-        });
-        this.offset += this.pageSize;
-        await this.parseWKB();
-        await this.addToMap();
-        this.selectFeature();
-      } catch (error) {
-        this.showError(error.message);
+        } catch (e) {
+          console.warn('Could not read KV metadata:', e.message);
+        }
+
+        // Step 5: Get file-level metadata
+        try {
+          this.fileMetadata = await getParquetFileMetadata(this.source);
+        } catch (e) {
+          console.warn('Could not read file metadata:', e.message);
+        }
+
+        // Step 6: Load first page of data
+        this.setStatus('Loading data...');
+        await this.executeQuery(0);
+
+        this.setStatus(
+          `Loaded ${this.loadedCount.toLocaleString()} of ${this.totalRows.toLocaleString()} rows.`
+        );
+      } catch (e) {
+        console.error('Load error:', e);
+        this.setStatus(`Error: ${e.message}`, true);
+      } finally {
+        this.loading = false;
+        // If the viewport changed while we were loading, reload with bbox
+        if (this.pendingViewportReload && this.hasBboxCovering) {
+          this.pendingViewportReload = false;
+          this.reloadForViewport();
+        }
+      }
+    },
+
+    async loadMore() {
+      if (!this.hasMore || this.loading) return;
+      this.loading = true;
+      try {
+        this.setStatus('Loading more data...');
+        await this.executeQuery(this.currentOffset);
+        this.setStatus(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
+      } catch (e) {
+        this.setStatus(`Error loading more: ${e.message}`, true);
       } finally {
         this.loading = false;
       }
     },
-    async loadProj(code) {
-      if (proj4.defs(code)) {
-        return;
-      }
+
+    async loadAll() {
+      if (!this.hasMore || this.loading) return;
+      this.loading = true;
       try {
-        const path = code.toLowerCase().replace(':', '/');
-        const response = await fetch(`https://spatialreference.org/ref/${path}/ogcwkt/`);
-        const wkt = await response.text();
-        proj4.defs(code, wkt);
-        register(proj4);
-        return proj4.defs(code);
-      } catch (error) {
-        this.showError(`Failed to load projection ${code}: ${error.message}`);
+        this.setStatus('Loading all remaining data...');
+        await this.executeQuery(this.currentOffset, null); // null limit = load all
+        this.setStatus(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
+      } catch (e) {
+        this.setStatus(`Error: ${e.message}`, true);
+      } finally {
+        this.loading = false;
       }
     },
-    async parseWKB() {
-      const format = new WKB();
-      await this.loadProj(this.crs);
-      const featureOpts = {
-        dataProjection: this.crs,
-        featureProjection: 'EPSG:3857'
-      };
-      for (const column in this.geoMetadata.columns) {
-        for (const i in this.data[column]) {
-          const feature = format.readFeature(this.data[column][i], featureOpts);
-          feature.setId(i);
-          this.data[column][i] = feature;
+
+    async applyFilters(newFilters) {
+      this.filters = newFilters;
+      this.loading = true;
+      try {
+        // Reset data for new filter
+        this.rows = [];
+        this.features = [];
+        this.currentOffset = 0;
+        this.selectedIndex = null;
+
+        // Get filtered count (respecting viewport bbox if coverings available)
+        this.setStatus('Counting filtered rows...');
+        this.filteredCount = await queryCount(
+          this.source,
+          this.filters,
+          this.hasBboxCovering ? this.viewportBounds : null,
+          this.primaryGeoColumn,
+          this.sourceCrsString
+        );
+
+        // Load first page with filters
+        this.setStatus('Loading filtered data...');
+        await this.executeQuery(0);
+
+        this.setStatus(
+          `Filter matched ${this.filteredCount.toLocaleString()} rows. Showing ${this.loadedCount.toLocaleString()}.`
+        );
+      } catch (e) {
+        this.setStatus(`Filter error: ${e.message}`, true);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    /**
+     * Execute query, append results to rows/features.
+     * @param {number} offset - Starting row offset
+     * @param {number|null} limit - Max rows (null = unlimited)
+     */
+    async executeQuery(offset, limit = this.pageSize) {
+      const result = await queryData(this.source, {
+        geoColumn: this.primaryGeoColumn,
+        filters: this.filters,
+        bbox: this.hasBboxCovering ? this.viewportBounds : null,
+        sourceCrs: this.sourceCrsString,
+        limit,
+        offset
+      });
+
+      const arrowRows = result.toArray();
+      const fieldNames = result.schema.fields.map((f) => f.name);
+      const hasSpatial = isSpatialLoaded();
+      const geoCol = this.primaryGeoColumn;
+
+      const newRows = [];
+      const newFeatures = [];
+
+      for (let i = 0; i < arrowRows.length; i++) {
+        const arrowRow = arrowRows[i];
+        const globalIndex = offset + i;
+
+        // Build plain row object for table
+        const row = { __index: globalIndex };
+        for (const name of fieldNames) {
+          if (name === '__geojson') continue;
+          // Always skip geometry columns in table data
+          if (this.geoColumns.includes(name)) continue;
+          const val = arrowRow[name];
+          // Convert special types to plain values
+          if (typeof val === 'bigint') {
+            row[name] = Number(val);
+          } else if (ArrayBuffer.isView(val)) {
+            row[name] = `[binary ${val.byteLength}B]`;
+          } else {
+            row[name] = val;
+          }
+        }
+        newRows.push(row);
+
+        // Build GeoJSON feature for map
+        if (geoCol && this.features.length + newFeatures.length < MAX_FEATURES_ON_MAP) {
+          let geometry = null;
+          try {
+            if (hasSpatial && arrowRow.__geojson) {
+              geometry = JSON.parse(arrowRow.__geojson);
+            } else if (!this.needsReprojection && arrowRow[geoCol]) {
+              // Fallback: parse WKB from raw binary (only for WGS 84 data;
+              // non-4326 CRS requires ST_Transform which needs the spatial extension)
+              const wkb = arrowRow[geoCol];
+              if (wkb instanceof Uint8Array || ArrayBuffer.isView(wkb)) {
+                geometry = wkbToGeoJSON(wkb);
+              }
+            }
+          } catch (e) {
+            // Skip features with unparseable geometry
+            console.warn(`Skipped geometry at row ${globalIndex}:`, e.message);
+          }
+
+          if (geometry) {
+            newFeatures.push({
+              type: 'Feature',
+              properties: { __index: globalIndex },
+              geometry
+            });
+          }
+        }
+      }
+
+      // Append to existing data
+      this.rows = [...this.rows, ...newRows];
+      this.features = [...this.features, ...newFeatures];
+      this.currentOffset = offset + arrowRows.length;
+      this.lastPageFull = limit ? arrowRows.length >= limit : false;
+
+      // Calculate bounds from features if this is the first load
+      if (offset === 0 && this.features.length > 0) {
+        // Prefer GeoParquet metadata bbox (only if in WGS 84 / no reprojection needed)
+        const geoColMeta = this.geoMetadata?.columns?.[geoCol];
+        if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
+          const [minx, miny, maxx, maxy] = geoColMeta.bbox;
+          this.mapBounds = [
+            [minx, miny],
+            [maxx, maxy]
+          ];
+        } else {
+          // Compute bounds from (already reprojected) GeoJSON features
+          this.mapBounds = computeBounds(this.features);
         }
       }
     },
-    async addToMap() {
-      for (const feature of this.data[this.geoMetadata.primary_column]) {
-        this.source.addFeature(feature);
+
+    // ── Selection sync ────────────────────────────────────
+    onTableSelect(index) {
+      this.selectedIndex = index;
+      // Zoom map to feature
+      if (this.$refs.mapView) {
+        this.$refs.mapView.zoomToFeature(index);
       }
-      this.map.getView().fit(this.source.getExtent());
     },
-    showError(message) {
-      alert(message);
+
+    onMapSelect(index) {
+      this.selectedIndex = index;
+      // TableView will auto-scroll via its watcher
     },
-    createMap() {
-      const select = new Select({ style: this.selectStyle });
-      select.on('select', (e) => this.selectInTable(parseInt(e.selected[0].getId(), 10)));
-      this.map = new Map({
-        layers: [
-          new TileLayer({
-            source: new OSM()
-          }),
-          new VectorLayer({
-            source: this.source
-          })
-        ],
-        target: 'map',
-        view: new View({
-          center: [0, 0],
-          zoom: 2
-        })
-      });
-      this.map.addInteraction(select);
+
+    // ── Viewport-driven spatial filtering ──────────────────
+    onViewportChange(bbox) {
+      this.viewportBounds = bbox;
+      if (!this.source || !this.hasBboxCovering) return;
+      if (this.loading) {
+        this.pendingViewportReload = true;
+        return;
+      }
+      this.reloadForViewport();
+    },
+
+    async reloadForViewport() {
+      const gen = ++this.viewportGeneration;
+      this.loading = true;
+      try {
+        this.rows = [];
+        this.features = [];
+        this.currentOffset = 0;
+        this.selectedIndex = null;
+
+        this.setStatus('Loading data in viewport...');
+        await this.executeQuery(0);
+
+        // Abort if a newer viewport change has occurred
+        if (gen !== this.viewportGeneration) return;
+
+        this.setStatus(
+          `Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`
+        );
+      } catch (e) {
+        if (gen === this.viewportGeneration) {
+          this.setStatus(`Error: ${e.message}`, true);
+        }
+      } finally {
+        this.loading = false;
+      }
     }
   }
 };
 </script>
 
 <style lang="scss">
-@import url('../node_modules/ol/ol.css');
+@import 'maplibre-gl/dist/maplibre-gl.css';
 
+* {
+  box-sizing: border-box;
+}
 html,
 body,
 #app,
@@ -456,105 +676,193 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  font-family: sans-serif;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  overflow: hidden;
+}
+#viewer {
+  display: flex;
+  flex-direction: column;
 }
 
+/* ── Buttons ─────────────────────────────────────────── */
+.btn {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border: 1px solid #999;
+  border-radius: 3px;
+  background: #f0f0f0;
+  cursor: pointer;
+  white-space: nowrap;
+  &:hover {
+    background: #e0e0e0;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+.btn-sm {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+.btn-primary {
+  background: #1976d2;
+  color: white;
+  border-color: #1565c0;
+  &:hover {
+    background: #1565c0;
+  }
+}
+.btn-danger {
+  background: #d32f2f;
+  color: white;
+  border-color: #c62828;
+  &:hover {
+    background: #c62828;
+  }
+}
+
+/* ── Header ──────────────────────────────────────────── */
 #header {
-  height: 4rem;
-  background-color: #333;
+  background: #333;
   color: #fff;
+  flex-shrink: 0;
 
   .row {
-    height: 2rem;
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0 0.5rem;
-    box-sizing: border-box;
+    gap: 0.5rem;
+    padding: 0 0.6rem;
+  }
 
-    .title {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex-grow: 1;
-    }
-    button {
-      white-space: nowrap;
-    }
-    h1 {
-      font-size: 1.2rem;
+  .header-row {
+    height: 2.2rem;
+  }
+
+  .title {
+    margin: 0;
+    font-size: 1.1rem;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 0.3rem;
+    .btn {
+      background: #555;
+      color: white;
+      border-color: #666;
+      &:hover {
+        background: #666;
+      }
     }
   }
 
-  .subheader {
-    background-color: #777;
+  .sub-header {
+    height: 1.8rem;
+    background: #555;
+    font-size: 0.8rem;
+    justify-content: space-between;
+
+    code {
+      font-size: 0.78rem;
+    }
+    .row-counts {
+      white-space: nowrap;
+      color: #ccc;
+    }
   }
 }
 
+/* ── Main layout ─────────────────────────────────────── */
 #main {
-  height: calc(100% - 4rem);
-}
-#map-container,
-#table-container,
-#error-container {
-  width: 100%;
-  height: 50%;
-}
-#table-container {
-  overflow: auto;
-}
-#error-container {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
+}
+
+#left-panel {
+  width: 50%;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-right: 2px solid #ccc;
+}
+
+#right-panel {
+  flex: 1;
+  min-width: 300px;
+}
+
+.load-more-bar {
+  padding: 6px;
+  text-align: center;
+  border-top: 1px solid #ddd;
+  background: #f8f8f8;
+  display: flex;
+  gap: 6px;
   justify-content: center;
 }
-#table {
+
+/* ── Welcome screen ──────────────────────────────────── */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  color: #555;
+  text-align: center;
+  padding: 2rem;
 
-  thead {
-    position: sticky;
-    top: 0;
-    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+  h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.5rem;
   }
-
-  tr {
-    &:nth-child(odd) {
-      background-color: #f2f2f2;
-    }
-    &.highlight {
-      background-color: #ff9999 !important;
-    }
+  p {
+    margin: 0.3em 0;
+    max-width: 500px;
+    line-height: 1.5;
   }
-
-  td,
-  th {
-    border-width: 0 1px 1px 0;
-    border-color: #555;
-    border-style: solid;
-    font-size: 0.8rem;
-    max-width: 10rem;
-  }
-
-  th {
-    background-color: #ccc;
-    padding: 0.3rem;
-  }
-
-  td > div {
-    padding: 0.3rem;
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    max-height: 3rem;
-    overflow: auto;
-    word-wrap: break-word;
+  .btn {
+    margin-top: 1rem;
+    font-size: 1rem;
+    padding: 8px 20px;
   }
 }
+
+/* ── Status bar ──────────────────────────────────────── */
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1.5rem;
+  background: #333;
+  color: #ccc;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  padding: 0 0.6rem;
+  z-index: 500;
+
+  &.error {
+    background: #c62828;
+    color: white;
+  }
+}
+
+/* (LoadingSpinner is self-contained via scoped styles) */
+
+/* ── Forms (used by modals) ──────────────────────────── */
 form {
   .row {
     display: flex;
@@ -580,19 +888,21 @@ form {
     margin: 3px;
   }
 }
-#map {
-  width: 100%;
-  height: 100%;
-}
-.loadmore {
-  text-align: center;
-  padding: 0.5rem;
-}
-#loading {
-  position: absolute;
-  bottom: 1rem;
-  left: 1rem;
-  width: 5rem;
-  height: 5rem;
+
+/* ── Responsive ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  #main {
+    flex-direction: column;
+  }
+  #left-panel {
+    width: 100%;
+    height: 50%;
+    border-right: none;
+    border-bottom: 2px solid #ccc;
+  }
+  #right-panel {
+    height: 50%;
+    min-width: unset;
+  }
 }
 </style>
