@@ -157,7 +157,6 @@
 <script>
 import {
   initDB,
-  isSpatialLoaded,
   registerLocalFile,
   dropFile,
   getSchema,
@@ -178,7 +177,7 @@ import LoadDataModal from './components/modals/LoadDataModal.vue';
 import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 
-const DEFAULT_PAGE_SIZE = 5000;
+const DEFAULT_PAGE_SIZE = 500;
 const MAX_FEATURES_ON_MAP = 100000;
 
 function getDefaultUrl() {
@@ -279,13 +278,14 @@ export default {
       const crs = this.primaryGeoCrs;
       if (!crs) return false;
       if (crs.id?.authority === 'EPSG' && crs.id?.code === 4326) return false;
+      // Also treat OGC:CRS84 as WGS84 (lon/lat, same as 4326 but axis-swapped; WKB always x,y)
+      if (crs.id?.authority === 'OGC' && crs.id?.code === 'CRS84') return false;
       return true;
     },
     /**
-     * Source CRS string for ST_Transform.
-     * Always passes the full PROJJSON from GeoParquet metadata instead of EPSG codes,
-     * because DuckDB-WASM's spatial extension doesn't ship the PROJ database needed
-     * for EPSG code lookups (crashes with _setThrew). PROJ can parse PROJJSON directly.
+     * Source CRS string for DuckDB ST_Transform.
+     * Pass full PROJJSON because DuckDB-WASM spatial doesn't bundle the PROJ database
+     * needed for EPSG code lookups (crashes with stoi: no conversion).
      */
     sourceCrsString() {
       if (!this.needsReprojection) return null;
@@ -371,7 +371,6 @@ export default {
       this.reset();
       const name = 'local_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       this.setStatus(`Reading file ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...`);
-
       try {
         const buffer = await file.arrayBuffer();
         await registerLocalFile(name, buffer);
@@ -514,7 +513,7 @@ export default {
     },
 
     /**
-     * Execute query, append results to rows/features.
+     * Execute query and append results to rows/features.
      */
     async executeQuery(offset, limit = this.pageSize) {
       const result = await queryData(this.source, {
@@ -528,7 +527,6 @@ export default {
 
       const arrowRows = result.toArray();
       const fieldNames = result.schema.fields.map((f) => f.name);
-      const hasSpatial = isSpatialLoaded();
       const geoCol = this.primaryGeoColumn;
 
       const newRows = [];
@@ -538,10 +536,10 @@ export default {
         const arrowRow = arrowRows[i];
         const globalIndex = offset + i;
 
-        // Build plain row object for table
+        // ── Build table row ────────────────────────────────
         const row = { __index: globalIndex };
         for (const name of fieldNames) {
-          if (name === '__geojson') continue;
+          if (name === '__wkb') continue;
           if (this.geoColumns.includes(name)) continue;
           const val = arrowRow[name];
           if (typeof val === 'bigint') {
@@ -551,26 +549,24 @@ export default {
           } else if (val instanceof Date) {
             row[name] = val.toISOString();
           } else if (val !== null && val !== undefined && typeof val === 'object') {
-            try {
-              row[name] = JSON.stringify(val);
-            } catch {
-              row[name] = String(val);
-            }
+            try { row[name] = JSON.stringify(val); } catch { row[name] = String(val); }
           } else {
             row[name] = val;
           }
         }
         newRows.push(row);
 
-        // Build GeoJSON feature for map
+        // ── Build GeoJSON feature for map ──────────────────
         if (geoCol && this.features.length + newFeatures.length < MAX_FEATURES_ON_MAP) {
           let geometry = null;
+
           try {
-            if (hasSpatial && arrowRow.__geojson) {
-              geometry = JSON.parse(arrowRow.__geojson);
-            } else if (!this.needsReprojection && arrowRow[geoCol]) {
+            if (arrowRow.__wkb && (arrowRow.__wkb instanceof Uint8Array || ArrayBuffer.isView(arrowRow.__wkb))) {
+              geometry = wkbToGeoJSON(arrowRow.__wkb);
+            } else if (!this.needsReprojection) {
+              // Fallback when spatial extension is unavailable but source is already WGS84.
               const wkb = arrowRow[geoCol];
-              if (wkb instanceof Uint8Array || ArrayBuffer.isView(wkb)) {
+              if (wkb && (wkb instanceof Uint8Array || ArrayBuffer.isView(wkb))) {
                 geometry = wkbToGeoJSON(wkb);
               }
             }
@@ -593,16 +589,16 @@ export default {
       this.currentOffset = offset + arrowRows.length;
       this.lastPageFull = limit ? arrowRows.length >= limit : false;
 
-      // Calculate bounds from features if this is the first load
+      // Set map bounds on first load
       if (offset === 0 && this.features.length > 0) {
         const geoColMeta = this.geoMetadata?.columns?.[geoCol];
+        // Only use the metadata bbox directly when data is WGS84 (no reprojection).
+        // When reprojecting, bbox in metadata is in source CRS and must not be used directly.
         if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
           const [minx, miny, maxx, maxy] = geoColMeta.bbox;
-          this.mapBounds = [
-            [minx, miny],
-            [maxx, maxy]
-          ];
+          this.mapBounds = [[minx, miny], [maxx, maxy]];
         } else {
+          // Compute bounds from the actual (reprojected) features.
           this.mapBounds = computeBounds(this.features);
         }
       }

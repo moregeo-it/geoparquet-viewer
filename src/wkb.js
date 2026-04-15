@@ -34,7 +34,6 @@ function readGeometry(view, offset) {
   let wkbType = view.getUint32(offset, le);
   offset += 4;
 
-  // Parse type flags for Z/M/SRID
   let hasZ = false;
   let hasM = false;
 
@@ -172,14 +171,13 @@ function readGeometry(view, offset) {
   return { geometry, offset };
 }
 
+// ─── Bounds computation ───────────────────────────────────────────────────────
+
 /**
- * Compute a bounding box [west, south, east, north] from GeoJSON features.
+ * Compute a bounding box [[west, south], [east, north]] from GeoJSON features.
  */
 export function computeBounds(features) {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
 
   for (const feature of features) {
     visitCoords(feature.geometry, (lon, lat) => {
@@ -191,10 +189,7 @@ export function computeBounds(features) {
   }
 
   if (!isFinite(west)) return null;
-  return [
-    [west, south],
-    [east, north]
-  ];
+  return [[west, south], [east, north]];
 }
 
 function visitCoords(geometry, callback) {
@@ -214,7 +209,8 @@ function visitCoords(geometry, callback) {
       break;
     case 'MultiPolygon':
       for (const poly of geometry.coordinates)
-        for (const ring of poly) for (const coord of ring) callback(coord[0], coord[1]);
+        for (const ring of poly)
+          for (const coord of ring) callback(coord[0], coord[1]);
       break;
     case 'GeometryCollection':
       for (const geom of geometry.geometries) visitCoords(geom, callback);

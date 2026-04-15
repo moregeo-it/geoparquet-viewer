@@ -85,9 +85,7 @@ export default {
 
       this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-      this.overlay = new MapboxOverlay({
-        layers: []
-      });
+      this.overlay = new MapboxOverlay({ layers: [], interleaved: false });
       this.map.addControl(this.overlay);
 
       this.map.on('load', () => {
@@ -96,7 +94,7 @@ export default {
         if (this.bounds) this.fitBounds();
       });
 
-      // Emit viewport bounds on every pan/zoom (debounced)
+      // Emit viewport bounds on pan/zoom (debounced 400 ms)
       this.map.on('moveend', () => {
         if (this.moveEndTimer) clearTimeout(this.moveEndTimer);
         this.moveEndTimer = setTimeout(() => this.emitViewport(), 400);
@@ -118,12 +116,19 @@ export default {
       if (!this.overlay || !this.ready) return;
 
       const layers = [];
+
       if (this.features.length > 0) {
         const selectedIndex = this.selectedIndex;
+
         layers.push(
           new GeoJsonLayer({
             id: 'data-layer',
-            data: this.features,
+            // Pass a fresh object reference so deck.gl always detects the change.
+            // Wrapping in a FeatureCollection is the most compatible format.
+            data: {
+              type: 'FeatureCollection',
+              features: this.features
+            },
             pickable: true,
             stroked: true,
             filled: true,
@@ -159,18 +164,23 @@ export default {
       }
 
       this.overlay.setProps({ layers });
-      // Ensure MapLibre triggers a repaint so the deck.gl overlay renders
+
+      // MapLibre needs an explicit repaint tick for the deck.gl canvas overlay to refresh.
       if (this.map) this.map.triggerRepaint();
     },
 
     fitBounds() {
       if (!this.bounds || !this.map) return;
+      // Validate bounds are finite numbers before calling fitBounds.
+      const [[w, s], [e, n]] = this.bounds;
+      if (!isFinite(w) || !isFinite(s) || !isFinite(e) || !isFinite(n)) return;
+      // Sanity-check that coordinates are in valid WGS84 range.
+      if (Math.abs(w) > 180 || Math.abs(e) > 180 || Math.abs(s) > 90 || Math.abs(n) > 90) {
+        console.warn('MapView: bounds appear to be in non-WGS84 CRS — skipping fitBounds', this.bounds);
+        return;
+      }
       try {
-        this.map.fitBounds(this.bounds, {
-          padding: 50,
-          maxZoom: 15,
-          duration: 500
-        });
+        this.map.fitBounds(this.bounds, { padding: 50, maxZoom: 15, duration: 500 });
       } catch (e) {
         console.warn('fitBounds failed:', e.message);
       }
@@ -181,7 +191,8 @@ export default {
      */
     zoomToFeature(index) {
       const feature = this.features.find((f) => f.properties.__index === index);
-      if (!feature || !feature.geometry || !this.map) return;
+      if (!feature?.geometry || !this.map) return;
+
       const geom = feature.geometry;
       if (geom.type === 'Point') {
         this.map.flyTo({
