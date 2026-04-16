@@ -31,7 +31,7 @@ The initial implementation was a working Vue 3 (Options API) application with th
 |------------------|----------------------------------------------------|--------------------------------------------|
 | Parquet parsing  | `hyparquet` + `hyparquet-compressors` + `hysnappy` | JS-only, runs on main thread               |
 | Map renderer     | OpenLayers (`ol`)                                  | SVG/Canvas, CPU-based rendering            |
-| Base map tiles   | OL OSM TileLayer                                   |                                            |
+| Base map tiles   | OL VectorTileLayer (MVT) — Carto/Protomaps        | Vector tiles with vertex reprojection      |
 | Geometry parsing | OL `WKB` format reader                             | WKB → OL Feature objects                   |
 | Reprojection     | `proj4js` + OL proj4 register                      | Fetched WKT defs from spatialreference.org |
 | State            | Vue Options API `data()` in `App.vue`              | Monolithic — all logic in one file         |
@@ -57,7 +57,7 @@ The initial implementation was a working Vue 3 (Options API) application with th
 
 **Description:** Replace hyparquet with DuckDB-Wasm for all Parquet reading and SQL. DuckDB's spatial extension outputs `ST_AsGeoJSON()` directly. deck.gl renders GeoJSON features. MapLibre GL provides the basemap.
 
-**Why it was scrapped:**
+**Why it was discarded:**
 
 - **GeoJSON serialization overhead.** DuckDB serializes geometry to GeoJSON text strings; deck.gl then parses them back into typed arrays. For 100k+ features this is a significant, avoidable round-trip.
 - **No CRS solution.** MapLibre GL's basemap tiles are locked to Web Mercator (EPSG:3857). For data in any other CRS (e.g. EPSG:25832, EPSG:4258), the basemap would be geometrically misaligned with the data unless the data was first reprojected to EPSG:4326. MapLibre's built-in projection support only covers a small set of named projections and cannot handle arbitrary EPSG codes. This made it impossible to meet feature requirement #8 without a separate reprojection step that negated the simplicity of this approach.
@@ -69,12 +69,18 @@ The initial implementation was a working Vue 3 (Options API) application with th
 
 **Description:** Use MapLibre GL as the sole map renderer, feeding it GeoJSON or vector tiles. Remove deck.gl entirely.
 
-**Why it was scrapped:**
+**Why it was discarded:**
 
 - **GeoJSON only path.** MapLibre's data sources accept GeoJSON or vector tiles (MVT). For large GeoParquet files, converting everything to GeoJSON in the browser is memory-intensive and slow. There is no native GeoArrow or WKB ingestion path in MapLibre.
 - **No columnar rendering.** MapLibre renders via its own internal symbol/fill/line layers which are not designed for dynamic, row-level selection highlighting or per-feature custom styling at scale. deck.gl's `GeoJsonLayer` with `pickable: true` handles this far more efficiently via GPU picking.
-- **Same CRS problem as Option A.** MapLibre's tile system is Mercator-only without per-tile warping. The arbitrary CRS requirement cannot be met cleanly.
-- **Vector tile generation is server-side work.** Converting GeoParquet → MVT requires a tile server or pre-processing pipeline, which violates the client-only constraint.
+- **Vector tile architecture incompatible with arbitrary CRS:**
+  - **The MVT spec is Mercator-only.** The Mapbox Vector Tile (MVT) specification defines geometry in Web Mercator (EPSG:3857) coordinates. Tiles are always generated in z/x/y (zoom/column/row) Mercator space. The spec has no native support for arbitrary projections.
+  - **MapLibre cannot reproject MVT tiles.** Unlike OpenLayers' tile warping engine, MapLibre has no built-in tile reprojection capability. It expects tiles to arrive in a coordinate system that matches its renderer (Mercator). To display MVT data in a different CRS (e.g., EPSG:25832), you would need to either:
+    1. Pre-generate all tiles for every CRS your users might need (infeasible — there are 10,000+ EPSG codes)
+    2. Generate tiles on-the-fly in the target CRS (server-side, real-time tile generation)
+  - **This violates the client-only constraint.** The project requirement is purely client-side (no backend). Real-time tile generation requires a tile server (e.g., Titiler, Geoserver, or custom tile pyramid service). This adds operational overhead and dependency on external infrastructure.
+  - **Performance cost is high.** Even if a tile server existed, network latency for fetching custom-CRS tiles on every view change would be significant — especially for remote data sources or users in low-bandwidth regions.
+- **Same CRS problem as Option A.** MapLibre's rendering is inherently Mercator-based. Even if you could somehow provide non-Mercator data, the map's projection would still be locked to Web Mercator, causing geometric misalignment.
 
 ---
 
@@ -82,7 +88,7 @@ The initial implementation was a working Vue 3 (Options API) application with th
 
 **Description:** The most fully designed option before the final decision. DuckDB handles all SQL including `ST_Transform` to reproject data to EPSG:4326. Geometry flows as WKB from DuckDB → parsed to GeoArrow columnar format → deck.gl `GeoJsonLayer`. MapLibre GL provides a standard Mercator basemap. proj4js kept as fallback for CRS DuckDB can't resolve.
 
-**Why it was scrapped:**
+**Why it was discarded:**
 
 - **Reprojection destroys the native CRS experience.** Feature requirement #8 explicitly asks to render data in its native projection. Always converting everything to EPSG:4326 means the basemap is always Web Mercator and the data loses its native coordinate frame. For datasets authored in national grid systems (e.g. ETRS89 / EPSG:25832 in Germany, OSGB36 in the UK), this is a meaningful loss of fidelity for GIS users.
 - **MapLibre cannot reproject its own basemap tiles** to arbitrary CRS. Even if deck.gl rendered the geometry correctly in a non-Mercator space, the MapLibre tile layer underneath would be geometrically wrong. This was a hard blocker.
@@ -97,15 +103,18 @@ The initial implementation was a working Vue 3 (Options API) application with th
 This hybrid combines:
 
 - **DuckDB-Wasm** for all Parquet reading, metadata extraction, SQL filtering, pagination, and geometry encoding detection.
-- **OpenLayers** for basemap tile management and native any-CRS tile reprojection. OL has first-class proj4js integration and can reproject OSM/WMTS tiles to any registered EPSG code client-side. This is exactly what it was built for.
+- **OpenLayers** for basemap tile management and native any-CRS tile reprojection. OL has first-class proj4js integration and can reproject MVT (vector tile) vertices to any registered EPSG code client-side via vertex transformation — providing crisp, seam-free basemaps in any CRS.
 - **deck.gl** (`ol-deck` / `@deck.gl/core` with an OL-compatible canvas overlay) for WebGL2 GPU-accelerated rendering of GeoArrow geometry. deck.gl handles large feature counts, per-feature picking, and custom styling that OL's Canvas renderer cannot match at scale.
 - **proj4js** for CRS definition loading. Definitions are read from the GeoParquet file's `geo` metadata when available, to enable OpenLayers' basemap tile reprojection to any registered EPSG code.
+- **MVT vector tiles** (Carto, Protomaps, or MapTiler) instead of raster tiles, enabling vertex-level reprojection for arbitrarily-CRS support without pixel warping artefacts.
+- **ol-mapbox-style** for applying Mapbox GL style specifications to VectorTileLayers.
 
 ### Why this combination wins
 
 | Requirement                | Solution                                                                          |
 |----------------------------|-----------------------------------------------------------------------------------|
-| Any-CRS basemap            | OpenLayers natively reprojects OSM tiles to any proj4-registered CRS              |
+| Any-CRS basemap            | OpenLayers VectorTileLayer with MVT; vertex reprojection to any proj4-registered CRS |
+| Vector tile quality        | Crisp lines, sharp labels, seam-free after reprojection (superior to raster warping) |
 | Large dataset rendering    | deck.gl WebGL2 BinaryGeometryLayer with GeoArrow columnar format — GPU instancing |
 | Native GeoArrow path       | deck.gl 9.x accepts GeoArrow Tables directly (zero-copy)                          |
 | WKB/WKT support            | Parsed to GeoArrow columnar format in browser, unified rendering                  |
@@ -113,6 +122,7 @@ This hybrid combines:
 | All geometry encodings     | DuckDB spatial reads WKB; GeoArrow passed through; WKT normalised to WKB          |
 | Local + remote files       | DuckDB `registerFileBuffer` (local) + `httpfs` (URL)                              |
 | Metadata-first UX          | DuckDB `parquet_schema()` + KVP metadata read before any row data                 |
+| Free tile sources          | Carto (zero-config) + Protomaps (open-source, HTTP range requests like GeoParquet) |
 
 ---
 
@@ -228,13 +238,15 @@ This hybrid combines:
 │  STEP 7 —                                                       │
 │                                                                 │
 │  OpenLayers Map:                                                │
-│  • TileLayer(OSM) → reprojected to data's native CRS            │
+│  • VectorTileLayer(MVT) — Carto/Protomaps basemap              │
+│  • MVT vertices reprojected to data's native CRS               │
 │  • proj4js CRS definition: read from file geo metadata first,   │
 │    fallback to epsg.io if not embedded                          │
 │  • ol.proj.register(proj4) to register custom CRS               │
 │  • View set to detected CRS from geoMetadata                    │
 │  • Fit view to geometry bbox on first load                      │
 │  • deck.gl canvas overlaid via custom OL layer                  │
+│  • Result: Crisp, seam-free vector basemap in any CRS           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -244,24 +256,48 @@ This hybrid combines:
 
 This is the most architecturally significant decision in the project.
 
-**The problem:** GeoParquet files can be authored in any CRS. Displaying them correctly requires the base-map tiles to be visually aligned with the geometry data.
+**The problem:** GeoParquet files can be authored in any CRS. Displaying them correctly requires the basemap tiles to be visually aligned with the geometry data.
 
-**The solution: Reproject basemap only, keep data native**
+**The solution: Reproject basemap tiles only (via vertex transformation), keep data native**
 
-OpenLayers has first-class support for arbitrary CRS via its proj4js integration. When a projection is registered with `ol.proj.register(proj4)`, OL's tile reprojection engine automatically warps incoming Mercator (EPSG:3857) OSM tiles into the target CRS on the fly, tile by tile, using bilinear resampling. The geometry data is kept in its native CRS without coordinate transformation — only the basemap is reprojected to match.
+OpenLayers has first-class support for arbitrary CRS via its proj4js integration. When a projection is registered with `ol.proj.register(proj4)`, OL's vector tile engine reprojects MVT tile vertices from their source CRS (Mercator/EPSG:3857) into the target CRS on-the-fly, per tile. This is fundamentally different from raster tile reprojection:
+
+- **Raster tile warping** — Pixel-by-pixel bilinear resampling. Results in slight smearing and boundary seams, especially at high zoom in distorted projections.
+- **Vector tile vertex reprojection** — Geometric transformation of line/polygon vertices. Results are crisp, seam-free, and mathematically exact. Labels and boundaries remain sharp after reprojection.
+
+**Why vector tiles instead of raster?**
+
+Vector tiles (MVT format) contain geometry coordinates, not pre-rendered pixels. Each tile's vertices are independently transformed from source CRS to target CRS. This approach has key advantages:
+
+| Factor | Vector tiles | Raster tiles |
+|---|---|---|
+| **Quality** | Crisp lines, no pixel artefacts, sharp labels | Slight smearing from interpolation, visible seams |
+| **Zoom robustness** | Clean at any zoom level | Degradation at high zoom in exotic projections |
+| **Performance** | ~5k–20k vertices per tile × 16 tiles per view = O(tile count) | Per-pixel CPU warping, slower at high resolution |
+| **Text rendering** | Labels reproject correctly | Text becomes blurry/distorted |
+| **Boundary seams** | Negligible for national grids (EPSG:25832, EPSG:27700) | More visible at tile edges |
+
+For the common case (national grid CRS like EPSG:25832), vector tile reprojection produces visually superior results with no perceivable quality loss.
+
+**Tile source options** (all vendor-neutral, no backend required):
+- **Carto Basemaps** (`basemaps.cartocdn.com`) — Free, open, OpenMapTiles schema, no API key
+- **Protomaps** (pmtiles CDN) — Open-source, HTTP range requests like GeoParquet, planet-scale `.pmtiles` file, completely free
+- **MapTiler** — Free tier 100k tiles/month, commercial for higher volume
+
+**Recommended default:** Carto for zero-config ease. Protomaps as the open-source alignment (both use HTTP range requests, both are purely static files, no server).
 
 **CRS definition priority:**
 
 1. If the GeoParquet file's `geo` metadata contains a full WKT or PROJJSON CRS definition, extract it directly (no network request)
 2. Otherwise, fetch the definition from epsg.io as a fallback
-3. Register with proj4js and apply to OpenLayers' tile reprojection
+3. Register with proj4js and apply to OpenLayers' vector tile reprojection
 
 ```
 Detection flow:
 ─────────────────────────────────────────────────────
 1. Parse 'geo' metadata → extract CRS authority:code
 2. If code is EPSG:4326 or EPSG:3857 (default/compatible):
-   → no reprojection needed, use default basemap
+   → no reprojection needed, use standard basemap
 3. Otherwise (non-standard CRS):
    a. Check if 'crs' field in geo metadata contains WKT or PROJJSON
    b. If yes:
@@ -272,7 +308,7 @@ Detection flow:
       - proj4.defs('EPSG:{code}', fetchedDefinition)
    d. ol.proj.register(proj4)
    e. Set OL View projection to 'EPSG:{code}'
-   f. OL automatically reprojects OSM tiles to that CRS
+   f. OL automatically reprojects MVT tiles' vertices to that CRS
 4. deck.gl geometry stays in its native CRS:
    - NO coordinate transformation via proj4js
    - WKB/WKT/GeoArrow data rendered as-is from the file
@@ -284,8 +320,8 @@ Detection flow:
 
 **Visual alignment:** Both the basemap and geometry operate in the same CRS coordinate space:
 
-- If the file's CRS is EPSG:3857 or EPSG:4326, the basemap is already in a compatible frame
-- If the file's CRS is different (e.g., EPSG:25832), OL reprojects its OSM tiles to that CRS, and the geometry (in native coordinates) aligns naturally
+- If the file's CRS is EPSG:3857 or EPSG:4326, the basemap is already in a compatible frame (no MVT reprojection needed, standard tiles render directly)
+- If the file's CRS is different (e.g., EPSG:25832), OL reprojects its MVT tiles' vertices to that CRS, and the geometry (in native coordinates) aligns naturally with crisp, seam-free visual results
 
 **Fallback:** If the CRS code cannot be resolved (file lacks WKT definition and epsg.io is unavailable or returns unknown code), the app falls back to EPSG:4326 and shows a warning banner.
 
