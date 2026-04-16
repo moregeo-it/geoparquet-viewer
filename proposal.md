@@ -44,7 +44,6 @@ The initial implementation was a working Vue 3 (Options API) application with th
 
 ### Pain points that drove the migration
 
-- **All logic in** `App.vue` — 447 lines mixing data loading, map management, WKB parsing, projection, selection, and UI state with no separation of concerns
 - **Main-thread blocking** — hyparquet runs synchronously on the main thread; large files freeze the UI
 - **No SQL layer** — filtering required manual JS array operations; no aggregation capability
 - **OL rendering performance** — OpenLayers' Canvas/SVG renderer struggles beyond ~50k features; large polygon datasets are slow
