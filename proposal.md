@@ -51,7 +51,7 @@ The initial implementation was a working Vue 3 (Options API) application with th
 
 ---
 
-## 4. Explored Options & Why They Were Scrapped
+## 4. Explored Options & Why They Were Discarded
 
 ### 4.1 Option A: DuckDB-Wasm → GeoJSON → deck.gl + MapLibre GL
 
