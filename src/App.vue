@@ -97,9 +97,10 @@
           <div class="right-panel">
             <MapView
               ref="mapView"
-              :features="features"
+              :geo-arrow-results="geoArrowResults"
               :selectedIndex="selectedIndex"
               :bounds="mapBounds"
+              :geometry-bounds-by-index="geometryBoundsByIndex"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
             />
@@ -166,7 +167,7 @@ import {
   queryData,
   queryCount
 } from './db.js';
-import { wkbToGeoJSON, computeBounds } from './wkb.js';
+import { buildGeoArrowTables, parseWKB } from '@walkthru-earth/objex-utils';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -178,7 +179,71 @@ import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 
 const DEFAULT_PAGE_SIZE = 500;
-const MAX_FEATURES_ON_MAP = 100000;
+const MAX_FEATURES_ON_MAP = 1000;
+
+function normalizeDisplayValue(value) {
+  if (typeof value === 'bigint') return Number(value);
+  if (ArrayBuffer.isView(value)) return `[binary ${value.byteLength}B]`;
+  if (value instanceof Date) return value.toISOString();
+  if (value !== null && value !== undefined && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return value;
+}
+
+function toUint8Array(value) {
+  if (value instanceof Uint8Array) return value;
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  return null;
+}
+
+function collectGeometryBounds(geometry) {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+
+  const visitCoords = (coords) => {
+    if (!coords || coords.length < 2) return;
+    if (typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+      const lon = coords[0];
+      const lat = coords[1];
+      if (lon < west) west = lon;
+      if (lat < south) south = lat;
+      if (lon > east) east = lon;
+      if (lat > north) north = lat;
+      return;
+    }
+    for (const child of coords) visitCoords(child);
+  };
+
+  const visitGeometry = (geom) => {
+    if (!geom) return;
+    if (geom.type === 'GeometryCollection' && Array.isArray(geom.geometries)) {
+      for (const child of geom.geometries) visitGeometry(child);
+      return;
+    }
+    visitCoords(geom.coordinates);
+  };
+
+  visitGeometry(geometry);
+
+  if (!isFinite(west)) return null;
+  return [west, south, east, north];
+}
+
+function boundsFromWkb(wkb) {
+  const geometry = parseWKB(wkb);
+  if (!geometry) return null;
+  return collectGeometryBounds(geometry);
+}
 
 function getDefaultUrl() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -212,8 +277,10 @@ export default {
 
       // Data
       rows: [],
-      features: [],
+      geoArrowResults: [],
       mapBounds: null,
+      geometryBoundsByIndex: {},
+      mapFeatureCount: 0,
 
       // Selection
       selectedIndex: null,
@@ -397,8 +464,10 @@ export default {
       this.fileMetadata = null;
       this.totalRows = -1;
       this.rows = [];
-      this.features = [];
+      this.geoArrowResults = [];
       this.mapBounds = null;
+      this.geometryBoundsByIndex = {};
+      this.mapFeatureCount = 0;
       this.selectedIndex = null;
       this.filters = [];
       this.filteredCount = null;
@@ -486,7 +555,10 @@ export default {
       this.loading = true;
       try {
         this.rows = [];
-        this.features = [];
+        this.geoArrowResults = [];
+        this.geometryBoundsByIndex = {};
+        this.mapFeatureCount = 0;
+        this.mapBounds = null;
         this.currentOffset = 0;
         this.selectedIndex = null;
 
@@ -513,7 +585,7 @@ export default {
     },
 
     /**
-     * Execute query and append results to rows/features.
+     * Execute query and append results to rows and GeoArrow map data.
      */
     async executeQuery(offset, limit = this.pageSize) {
       const result = await queryData(this.source, {
@@ -530,7 +602,9 @@ export default {
       const geoCol = this.primaryGeoColumn;
 
       const newRows = [];
-      const newFeatures = [];
+      const mapWkbArrays = [];
+      const mapGeometryBounds = {};
+      const mapIndices = [];
 
       for (let i = 0; i < arrowRows.length; i++) {
         const arrowRow = arrowRows[i];
@@ -541,65 +615,65 @@ export default {
         for (const name of fieldNames) {
           if (name === '__wkb') continue;
           if (this.geoColumns.includes(name)) continue;
-          const val = arrowRow[name];
-          if (typeof val === 'bigint') {
-            row[name] = Number(val);
-          } else if (ArrayBuffer.isView(val)) {
-            row[name] = `[binary ${val.byteLength}B]`;
-          } else if (val instanceof Date) {
-            row[name] = val.toISOString();
-          } else if (val !== null && val !== undefined && typeof val === 'object') {
-            try { row[name] = JSON.stringify(val); } catch { row[name] = String(val); }
-          } else {
-            row[name] = val;
-          }
+          row[name] = normalizeDisplayValue(arrowRow[name]);
         }
         newRows.push(row);
 
-        // ── Build GeoJSON feature for map ──────────────────
-        if (geoCol && this.features.length + newFeatures.length < MAX_FEATURES_ON_MAP) {
-          let geometry = null;
-
-          try {
-            if (arrowRow.__wkb && (arrowRow.__wkb instanceof Uint8Array || ArrayBuffer.isView(arrowRow.__wkb))) {
-              geometry = wkbToGeoJSON(arrowRow.__wkb);
-            } else if (!this.needsReprojection) {
-              // Fallback when spatial extension is unavailable but source is already WGS84.
-              const wkb = arrowRow[geoCol];
-              if (wkb && (wkb instanceof Uint8Array || ArrayBuffer.isView(wkb))) {
-                geometry = wkbToGeoJSON(wkb);
-              }
+        // ── Collect map-ready WKB + attributes ──────────────
+        if (geoCol) {
+          const wkb = toUint8Array(arrowRow.__wkb ?? arrowRow[geoCol]);
+          if (wkb) {
+            const bounds = boundsFromWkb(wkb);
+            if (bounds) {
+              mapGeometryBounds[globalIndex] = bounds;
             }
-          } catch (e) {
-            console.warn(`Skipped geometry at row ${globalIndex}:`, e.message);
-          }
 
-          if (geometry) {
-            newFeatures.push({
-              type: 'Feature',
-              properties: { __index: globalIndex },
-              geometry
-            });
+            if (this.mapFeatureCount + mapWkbArrays.length < MAX_FEATURES_ON_MAP) {
+              mapWkbArrays.push(wkb);
+              mapIndices.push(globalIndex);
+            }
           }
         }
       }
 
       this.rows = [...this.rows, ...newRows];
-      this.features = [...this.features, ...newFeatures];
+
+      if (mapWkbArrays.length > 0) {
+        const attributes = new Map([
+          ['__index', { values: mapIndices, type: 'BIGINT' }]
+        ]);
+        const geoArrowResults = buildGeoArrowTables(mapWkbArrays, attributes);
+
+        this.geoArrowResults = [...this.geoArrowResults, ...geoArrowResults];
+        this.mapFeatureCount += mapWkbArrays.length;
+        this.geometryBoundsByIndex = { ...this.geometryBoundsByIndex, ...mapGeometryBounds };
+
+        if (offset === 0) {
+          const firstResult = geoArrowResults[0];
+          if (firstResult) {
+            const [minX, minY, maxX, maxY] = firstResult.bounds;
+            this.mapBounds = [[minX, minY], [maxX, maxY]];
+          }
+        }
+      }
+
       this.currentOffset = offset + arrowRows.length;
       this.lastPageFull = limit ? arrowRows.length >= limit : false;
 
       // Set map bounds on first load
-      if (offset === 0 && this.features.length > 0) {
+      if (offset === 0 && this.geoArrowResults.length > 0) {
         const geoColMeta = this.geoMetadata?.columns?.[geoCol];
         // Only use the metadata bbox directly when data is WGS84 (no reprojection).
         // When reprojecting, bbox in metadata is in source CRS and must not be used directly.
         if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
           const [minx, miny, maxx, maxy] = geoColMeta.bbox;
           this.mapBounds = [[minx, miny], [maxx, maxy]];
-        } else {
-          // Compute bounds from the actual (reprojected) features.
-          this.mapBounds = computeBounds(this.features);
+        } else if (!this.mapBounds) {
+          const firstResult = this.geoArrowResults[0];
+          if (firstResult) {
+            const [minX, minY, maxX, maxY] = firstResult.bounds;
+            this.mapBounds = [[minX, minY], [maxX, maxY]];
+          }
         }
       }
     },
@@ -632,7 +706,10 @@ export default {
       this.loading = true;
       try {
         this.rows = [];
-        this.features = [];
+        this.geoArrowResults = [];
+        this.geometryBoundsByIndex = {};
+        this.mapFeatureCount = 0;
+        this.mapBounds = null;
         this.currentOffset = 0;
         this.selectedIndex = null;
 

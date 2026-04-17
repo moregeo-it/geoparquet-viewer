@@ -5,7 +5,11 @@
 <script>
 import maplibregl from 'maplibre-gl';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { GeoJsonLayer } from '@deck.gl/layers';
+import {
+  GeoArrowPathLayer,
+  GeoArrowPolygonLayer,
+  GeoArrowScatterplotLayer
+} from '@geoarrow/deck.gl-layers';
 
 const NORMAL_FILL = [51, 153, 204, 120];
 const NORMAL_LINE = [51, 153, 204, 200];
@@ -15,9 +19,10 @@ const SELECTED_LINE = [255, 0, 0, 255];
 export default {
   name: 'MapView',
   props: {
-    features: { type: Array, default: () => [] },
+    geoArrowResults: { type: Array, default: () => [] },
     selectedIndex: { type: Number, default: null },
-    bounds: { type: Array, default: null }
+    bounds: { type: Array, default: null },
+    geometryBoundsByIndex: { type: Object, default: () => ({}) }
   },
   emits: ['select', 'viewportChange'],
   data() {
@@ -29,7 +34,7 @@ export default {
     };
   },
   watch: {
-    features: {
+    geoArrowResults: {
       handler() {
         this.updateLayers();
         if (this.bounds) {
@@ -54,6 +59,14 @@ export default {
     }
   },
   methods: {
+    rowIndex(row) {
+      if (!row) return null;
+      const value = row.__index;
+      if (typeof value === 'number' && isFinite(value)) return value;
+      if (typeof value === 'bigint') return Number(value);
+      return null;
+    },
+
     createMap() {
       this.map = new maplibregl.Map({
         container: this.$refs.mapContainer,
@@ -116,51 +129,98 @@ export default {
       if (!this.overlay || !this.ready) return;
 
       const layers = [];
-
-      if (this.features.length > 0) {
+      if (this.geoArrowResults.length > 0) {
         const selectedIndex = this.selectedIndex;
+        const getColorIndex = (row) => this.rowIndex(row) === selectedIndex;
+        const emitSelectFromInfo = (info) => {
+          const index = this.rowIndex(info?.object);
+          if (index !== null) this.$emit('select', index);
+        };
 
-        layers.push(
-          new GeoJsonLayer({
-            id: 'data-layer',
-            // Pass a fresh object reference so deck.gl always detects the change.
-            // Wrapping in a FeatureCollection is the most compatible format.
-            data: {
-              type: 'FeatureCollection',
-              features: this.features
-            },
-            pickable: true,
-            stroked: true,
-            filled: true,
-            pointType: 'circle',
-            getFillColor: (f) =>
-              f.properties.__index === selectedIndex ? SELECTED_FILL : NORMAL_FILL,
-            getLineColor: (f) =>
-              f.properties.__index === selectedIndex ? SELECTED_LINE : NORMAL_LINE,
-            getLineWidth: 2,
-            getPointRadius: 6,
-            pointRadiusMinPixels: 3,
-            pointRadiusMaxPixels: 20,
-            lineWidthMinPixels: 1,
-            lineWidthMaxPixels: 4,
-            autoHighlight: true,
-            highlightColor: [255, 200, 0, 160],
-            onHover: (info) => {
-              if (this.map) {
-                this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
-              }
-            },
-            onClick: (info) => {
-              if (info.object) {
-                this.$emit('select', info.object.properties.__index);
-              }
-            },
-            updateTriggers: {
-              getFillColor: [selectedIndex],
-              getLineColor: [selectedIndex]
-            }
-          })
-        );
+        for (let i = 0; i < this.geoArrowResults.length; i++) {
+          const result = this.geoArrowResults[i];
+          const layerId = `geoarrow-${result.geometryType}-${i}`;
+
+          if (result.geometryType === 'point' || result.geometryType === 'multipoint') {
+            layers.push(
+              new GeoArrowScatterplotLayer({
+                id: layerId,
+                data: result.table,
+                getFillColor: (row) =>
+                  getColorIndex(row) ? SELECTED_FILL : NORMAL_FILL,
+                getRadius: 6,
+                radiusUnits: 'pixels',
+                radiusMinPixels: 4,
+                radiusMaxPixels: 12,
+                pickable: true,
+                autoHighlight: true,
+                highlightColor: [255, 200, 0, 160],
+                _validate: false,
+                onHover: (info) => {
+                  if (this.map) {
+                    this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
+                  }
+                },
+                onClick: emitSelectFromInfo,
+                updateTriggers: {
+                  getFillColor: [selectedIndex]
+                }
+              })
+            );
+          } else if (result.geometryType === 'linestring' || result.geometryType === 'multilinestring') {
+            layers.push(
+              new GeoArrowPathLayer({
+                id: layerId,
+                data: result.table,
+                getColor: (row) =>
+                  getColorIndex(row) ? SELECTED_LINE : NORMAL_LINE,
+                getWidth: 2.5,
+                widthUnits: 'pixels',
+                widthMinPixels: 1.5,
+                pickable: true,
+                autoHighlight: true,
+                highlightColor: [255, 200, 0, 160],
+                _validate: false,
+                onHover: (info) => {
+                  if (this.map) {
+                    this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
+                  }
+                },
+                onClick: emitSelectFromInfo,
+                updateTriggers: {
+                  getColor: [selectedIndex]
+                }
+              })
+            );
+          } else {
+            layers.push(
+              new GeoArrowPolygonLayer({
+                id: layerId,
+                data: result.table,
+                getFillColor: (row) =>
+                  getColorIndex(row) ? SELECTED_FILL : NORMAL_FILL,
+                getLineColor: (row) =>
+                  getColorIndex(row) ? SELECTED_LINE : NORMAL_LINE,
+                getLineWidth: 2,
+                lineWidthMinPixels: 1.5,
+                pickable: true,
+                autoHighlight: true,
+                highlightColor: [255, 200, 0, 160],
+                _validate: false,
+                onHover: (info) => {
+                  if (this.map) {
+                    this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
+                  }
+                },
+                onClick: emitSelectFromInfo,
+                updateTriggers: {
+                  getFillColor: [selectedIndex],
+                  getLineColor: [selectedIndex]
+                }
+              })
+            );
+          }
+        }
       }
 
       this.overlay.setProps({ layers });
@@ -190,43 +250,34 @@ export default {
      * Zoom the map to the geometry of a specific feature.
      */
     zoomToFeature(index) {
-      const feature = this.features.find((f) => f.properties.__index === index);
-      if (!feature?.geometry || !this.map) return;
+      if (!this.map) return;
 
-      const geom = feature.geometry;
-      if (geom.type === 'Point') {
+      const bounds = this.geometryBoundsByIndex?.[index];
+      if (!bounds) return;
+
+      const [[w, s], [e, n]] = [
+        [bounds[0], bounds[1]],
+        [bounds[2], bounds[3]]
+      ];
+
+      if (!isFinite(w) || !isFinite(s) || !isFinite(e) || !isFinite(n)) return;
+
+      if (Math.abs(e - w) < 1e-9 && Math.abs(n - s) < 1e-9) {
         this.map.flyTo({
-          center: geom.coordinates,
+          center: [w, s],
           zoom: Math.max(this.map.getZoom(), 12),
           duration: 500
         });
-      } else {
-        // Compute bounds from geometry
-        let west = Infinity,
-          south = Infinity,
-          east = -Infinity,
-          north = -Infinity;
-        const visit = (coords) => {
-          if (typeof coords[0] === 'number') {
-            if (coords[0] < west) west = coords[0];
-            if (coords[1] < south) south = coords[1];
-            if (coords[0] > east) east = coords[0];
-            if (coords[1] > north) north = coords[1];
-          } else {
-            for (const c of coords) visit(c);
-          }
-        };
-        visit(geom.coordinates || []);
-        if (isFinite(west)) {
-          this.map.fitBounds(
-            [
-              [west, south],
-              [east, north]
-            ],
-            { padding: 80, maxZoom: 15, duration: 500 }
-          );
-        }
+        return;
       }
+
+      this.map.fitBounds(
+        [
+          [w, s],
+          [e, n]
+        ],
+        { padding: 80, maxZoom: 15, duration: 500 }
+      );
     }
   }
 };

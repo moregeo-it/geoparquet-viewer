@@ -306,7 +306,7 @@ export async function queryData(
   }
 
   const sql = `SELECT *${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
-  console.log('Query:', sql);
+
   return query(sql);
 }
 
