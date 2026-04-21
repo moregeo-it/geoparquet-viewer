@@ -167,7 +167,7 @@ import {
   queryData,
   queryCount
 } from './db.js';
-import { buildGeoArrowTables, parseWKB } from '@walkthru-earth/objex-utils';
+import { buildGeoArrowTables, parseWKB, formatValue, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -178,71 +178,33 @@ import LoadDataModal from './components/modals/LoadDataModal.vue';
 import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 
-const DEFAULT_PAGE_SIZE = 500;
-const MAX_FEATURES_ON_MAP = 1000;
+const DEFAULT_PAGE_SIZE = 10000;
+const MAX_FEATURES_ON_MAP = 100000;
 
 function normalizeDisplayValue(value) {
-  if (typeof value === 'bigint') return Number(value);
+  if (value === null || value === undefined) return value;
   if (ArrayBuffer.isView(value)) return `[binary ${value.byteLength}B]`;
-  if (value instanceof Date) return value.toISOString();
-  if (value !== null && value !== undefined && typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
-    }
-  }
-  return value;
-}
-
-function toUint8Array(value) {
-  if (value instanceof Uint8Array) return value;
-  if (ArrayBuffer.isView(value)) {
-    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-  }
-  if (value instanceof ArrayBuffer) return new Uint8Array(value);
-  return null;
-}
-
-function collectGeometryBounds(geometry) {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-
-  const visitCoords = (coords) => {
-    if (!coords || coords.length < 2) return;
-    if (typeof coords[0] === 'number' && typeof coords[1] === 'number') {
-      const lon = coords[0];
-      const lat = coords[1];
-      if (lon < west) west = lon;
-      if (lat < south) south = lat;
-      if (lon > east) east = lon;
-      if (lat > north) north = lat;
-      return;
-    }
-    for (const child of coords) visitCoords(child);
-  };
-
-  const visitGeometry = (geom) => {
-    if (!geom) return;
-    if (geom.type === 'GeometryCollection' && Array.isArray(geom.geometries)) {
-      for (const child of geom.geometries) visitGeometry(child);
-      return;
-    }
-    visitCoords(geom.coordinates);
-  };
-
-  visitGeometry(geometry);
-
-  if (!isFinite(west)) return null;
-  return [west, south, east, north];
+  return formatValue(value);
 }
 
 function boundsFromWkb(wkb) {
   const geometry = parseWKB(wkb);
   if (!geometry) return null;
-  return collectGeometryBounds(geometry);
+  const coords = geometry.coordinates;
+  if (!coords) return null;
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+  const visit = (c) => {
+    if (typeof c[0] === 'number' && typeof c[1] === 'number') {
+      if (c[0] < west) west = c[0];
+      if (c[1] < south) south = c[1];
+      if (c[0] > east) east = c[0];
+      if (c[1] > north) north = c[1];
+      return;
+    }
+    for (const child of c) visit(child);
+  };
+  visit(coords);
+  return isFinite(west) ? [west, south, east, north] : null;
 }
 
 function getDefaultUrl() {
@@ -324,15 +286,7 @@ export default {
     /** Detected geometry column from schema (fallback when no geo metadata) */
     detectedGeoColumn() {
       if (!this.schema) return null;
-      const geoTypes = ['GEOMETRY', 'BLOB', 'WKB_GEOMETRY', 'BYTEA'];
-      const geoNames = ['geometry', 'geom', 'wkb_geometry', 'the_geom', 'shape'];
-      for (const col of this.schema) {
-        if (geoNames.includes(col.name.toLowerCase())) return col.name;
-      }
-      for (const col of this.schema) {
-        if (geoTypes.includes(col.type.toUpperCase())) return col.name;
-      }
-      return null;
+      return findGeoColumn(this.schema);
     },
     /** CRS object for the primary geometry column (null = WGS 84 per GeoParquet spec) */
     primaryGeoCrs() {
@@ -621,7 +575,7 @@ export default {
 
         // ── Collect map-ready WKB + attributes ──────────────
         if (geoCol) {
-          const wkb = toUint8Array(arrowRow.__wkb ?? arrowRow[geoCol]);
+          const wkb = toBinary(arrowRow.__wkb ?? arrowRow[geoCol]);
           if (wkb) {
             const bounds = boundsFromWkb(wkb);
             if (bounds) {
@@ -732,15 +686,41 @@ export default {
 </script>
 
 <style>
+/* Remove padding from v-main to use full space */
+:deep(.v-main) {
+  padding: 0 !important;
+}
+
+/* Ensure content-panels fills all available space */
+.content-panels {
+  height: calc(100vh - 48px - 48px - 24px); /* 100vh - appbar(48px) - toolbar(48px) - statusbar(24px) */
+  overflow: hidden;
+}
+
 .left-panel {
   width: 50%;
   min-width: 300px;
   border-right: 2px solid #ccc;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
 }
+
+.table-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
 .right-panel {
   flex: 1;
   min-width: 300px;
+  overflow: hidden;
+  height: 100%;
 }
+
 .status-bar {
   position: fixed;
   bottom: 0;
@@ -753,16 +733,27 @@ export default {
 @media (max-width: 768px) {
   .content-panels {
     flex-direction: column !important;
+    height: calc(100vh - 48px - 48px - 24px);
   }
   .left-panel {
     width: 100% !important;
     height: 50%;
     border-right: none !important;
     border-bottom: 2px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
   .right-panel {
     height: 50%;
     min-width: unset !important;
+    overflow: hidden;
+  }
+  .table-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
   }
 }
 </style>

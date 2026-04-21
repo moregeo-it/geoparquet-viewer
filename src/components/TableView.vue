@@ -72,14 +72,16 @@ export default {
   },
   watch: {
     selectedIndex(index) {
-      if (index !== null && index !== undefined) {
+      if (index !== null && index !== undefined && !this._clickedFromTable) {
         this.$nextTick(() => this.scrollToRow(index));
       }
+      this._clickedFromTable = false;
     }
   },
   methods: {
     onRowClick(event, { item }) {
-      this.$emit('select', item.__index);
+      this._clickedFromTable = true;
+      this.$emit('select', item.__index === this.selectedIndex ? null : item.__index);
     },
     rowProps({ item }) {
       return {
@@ -90,15 +92,10 @@ export default {
     scrollToRow(index) {
       const rowPosition = this.rows.findIndex((r) => r.__index === index);
       if (rowPosition < 0) return;
-      const wrapper = this.$el?.querySelector('.v-table__wrapper');
-      if (!wrapper) return;
-      const rowTop = rowPosition * 30;
-      const viewTop = wrapper.scrollTop;
-      const viewBottom = viewTop + wrapper.clientHeight;
-      if (rowTop < viewTop + 30 || rowTop + 30 > viewBottom - 30) {
-        wrapper.scrollTop = rowTop - wrapper.clientHeight / 2 + 15;
+      if (this.$refs.table?.scrollToIndex) {
+        this.$refs.table.scrollToIndex(rowPosition);
       }
-    }
+    },
   }
 };
 </script>

@@ -131,23 +131,31 @@ export default {
       const layers = [];
       if (this.geoArrowResults.length > 0) {
         const selectedIndex = this.selectedIndex;
-        const getColorIndex = (row) => this.rowIndex(row) === selectedIndex;
         const emitSelectFromInfo = (info) => {
           const index = this.rowIndex(info?.object);
-          if (index !== null) this.$emit('select', index);
+          if (index === null) return;
+          this.$emit('select', index === selectedIndex ? null : index);
         };
 
         for (let i = 0; i < this.geoArrowResults.length; i++) {
           const result = this.geoArrowResults[i];
           const layerId = `geoarrow-${result.geometryType}-${i}`;
 
+          // Extract __index column values for selection lookup in accessors.
+          // GeoArrow accessor functions receive { index, data, target }, not row objects.
+          const indexCol = result.table.getChild('__index');
+          const indexValues = indexCol ? indexCol.toArray() : null;
+          const isSelected = (objectInfo) =>
+            selectedIndex !== null && indexValues !== null &&
+            indexValues[objectInfo.index] === selectedIndex;
+
           if (result.geometryType === 'point' || result.geometryType === 'multipoint') {
             layers.push(
               new GeoArrowScatterplotLayer({
                 id: layerId,
                 data: result.table,
-                getFillColor: (row) =>
-                  getColorIndex(row) ? SELECTED_FILL : NORMAL_FILL,
+                getFillColor: (objectInfo) =>
+                  isSelected(objectInfo) ? SELECTED_FILL : NORMAL_FILL,
                 getRadius: 6,
                 radiusUnits: 'pixels',
                 radiusMinPixels: 4,
@@ -172,8 +180,8 @@ export default {
               new GeoArrowPathLayer({
                 id: layerId,
                 data: result.table,
-                getColor: (row) =>
-                  getColorIndex(row) ? SELECTED_LINE : NORMAL_LINE,
+                getColor: (objectInfo) =>
+                  isSelected(objectInfo) ? SELECTED_LINE : NORMAL_LINE,
                 getWidth: 2.5,
                 widthUnits: 'pixels',
                 widthMinPixels: 1.5,
@@ -197,10 +205,10 @@ export default {
               new GeoArrowPolygonLayer({
                 id: layerId,
                 data: result.table,
-                getFillColor: (row) =>
-                  getColorIndex(row) ? SELECTED_FILL : NORMAL_FILL,
-                getLineColor: (row) =>
-                  getColorIndex(row) ? SELECTED_LINE : NORMAL_LINE,
+                getFillColor: (objectInfo) =>
+                  isSelected(objectInfo) ? SELECTED_FILL : NORMAL_FILL,
+                getLineColor: (objectInfo) =>
+                  isSelected(objectInfo) ? SELECTED_LINE : NORMAL_LINE,
                 getLineWidth: 2,
                 lineWidthMinPixels: 1.5,
                 pickable: true,

@@ -70,8 +70,16 @@ export default {
           title: 'Airports (small, points)'
         },
         {
+          url: 'https://data.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
+          title: 'Energy performance certificates Wolverhampton (medium, polygons)'
+        },
+        {
           url: 'https://data.source.coop/fiboa/ai4sf/ai4sf.parquet',
           title: 'Field boundaries Cambodia/Vietnam (medium, polygons)'
+        },
+        {
+          url: 'https://data.source.coop/fiboa/de-bb/dfbk.parquet',
+          title: 'Building footprints Berlin / Brandenburg (large, polygons)'
         }
       ]
     };
