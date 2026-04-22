@@ -97,7 +97,7 @@ export async function getConnection() {
  */
 export async function query(sql) {
   const conn = await getConnection();
-  return conn.query(sql);
+  return await conn.query(sql);
 }
 
 /**
