@@ -60,6 +60,16 @@ export async function initDB(onProgress = () => {}) {
       console.warn('Could not preload coordinate systems:', e.message);
     }
 
+    onProgress('Loading httpfs extension...');
+    try {
+      await _conn.query(`INSTALL httpfs`);
+      await _conn.query(`LOAD httpfs`);
+      onProgress('httpfs extension loaded.');
+    } catch (e) {
+      console.warn('httpfs extension not available:', e.message);
+      onProgress('httpfs extension unavailable — HTTP sources will not work.');
+    }
+
     onProgress('Loading spatial extension...');
     try {
       await _conn.query(`INSTALL spatial`);
