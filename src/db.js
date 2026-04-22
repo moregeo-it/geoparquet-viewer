@@ -17,6 +17,10 @@ let _conn = null;
 let _spatialLoaded = false;
 let _initPromise = null;
 
+// Cache: source → { geoColumn → boolean } for isGeometryType results.
+// Avoids repeated DESCRIBE queries on every queryData/queryCount call.
+const _geomTypeCache = new Map();
+
 /**
  * Initialize DuckDB-WASM with required extensions.
  * WASM bundles are self-hosted (no external CDN dependency).
@@ -161,13 +165,36 @@ export async function getSchema(source) {
  * @returns {Promise<boolean>} true if the column type starts with "GEOMETRY".
  */
 export async function isGeometryType(source, geoColumn) {
+  // Check cache first to avoid repeated DESCRIBE queries.
+  const cacheKey = source;
+  if (_geomTypeCache.has(cacheKey)) {
+    const cached = _geomTypeCache.get(cacheKey);
+    if (geoColumn in cached) return cached[geoColumn];
+  }
   try {
     const schema = await getSchema(source);
-    const col = schema.find((c) => c.name === geoColumn);
-    return col ? col.type.toUpperCase().startsWith('GEOMETRY') : false;
+    // Cache results for ALL columns in one go.
+    const entry = {};
+    for (const col of schema) {
+      entry[col.name] = col.type.toUpperCase().startsWith('GEOMETRY');
+    }
+    _geomTypeCache.set(cacheKey, entry);
+    return entry[geoColumn] ?? false;
   } catch {
     return false;
   }
+}
+
+/**
+ * Cache the geometry type detection from an already-fetched schema.
+ * Call this after getSchema() to avoid a redundant DESCRIBE query later.
+ */
+export function cacheSchemaGeomTypes(source, schema) {
+  const entry = {};
+  for (const col of schema) {
+    entry[col.name] = col.type.toUpperCase().startsWith('GEOMETRY');
+  }
+  _geomTypeCache.set(source, entry);
 }
 
 /**
@@ -194,6 +221,91 @@ export async function getRowCount(source) {
     `SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`
   );
   return Number(result.toArray()[0].cnt);
+}
+
+/**
+ * Bootstrap all file metadata in minimal round-trips.
+ * Combines schema, row count, row group size, and KV metadata into a single flow.
+ * For remote files this dramatically reduces HTTP range request overhead since
+ * DuckDB caches the Parquet footer after the first metadata function call.
+ *
+ * @param {string} source - Parquet source path.
+ * @param {Function} onProgress - Status callback.
+ * @returns {Promise<{schema, totalRows, rowGroupSize, kvMetadata, geoMetadata, fileMetadata}>}
+ */
+export async function bootstrapMetadata(source, onProgress = () => {}) {
+  const escaped = escapeSource(source);
+
+  // 1. Schema (also populates geometry type cache)
+  onProgress('Reading schema...');
+  const schemaResult = await query(`DESCRIBE SELECT * FROM read_parquet('${escaped}')`);
+  const schema = schemaResult.toArray().map((row) => ({
+    name: String(row.column_name),
+    type: String(row.column_type),
+    nullable: String(row.null) === 'YES'
+  }));
+  cacheSchemaGeomTypes(source, schema);
+
+  // 2. Row count + row group size from parquet_metadata (single query, footer already cached)
+  onProgress('Reading parquet metadata...');
+  let totalRows = -1;
+  let rowGroupSize = null;
+  try {
+    const statsResult = await query(
+      `SELECT SUM(row_group_num_rows) AS total_rows,
+              FIRST(row_group_num_rows) AS first_rg_size
+       FROM (SELECT DISTINCT row_group_id, row_group_num_rows
+             FROM parquet_metadata('${escaped}'))`
+    );
+    const statsRow = statsResult.toArray()[0];
+    totalRows = Number(statsRow.total_rows);
+    const rgSize = Number(statsRow.first_rg_size);
+    rowGroupSize = rgSize > 0 ? rgSize : null;
+  } catch (e) {
+    console.warn('parquet_metadata failed, falling back to COUNT(*):', e.message);
+    try {
+      const countResult = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
+      totalRows = Number(countResult.toArray()[0].cnt);
+    } catch { /* leave as -1 */ }
+  }
+
+  // 3. KV metadata + geo metadata (parquet_kv_metadata — footer already cached)
+  onProgress('Reading KV metadata...');
+  let kvMetadata = null;
+  let geoMetadata = null;
+  try {
+    const kvResult = await query(`SELECT key, value FROM parquet_kv_metadata('${escaped}')`);
+    kvMetadata = {};
+    for (const row of kvResult.toArray()) {
+      const key = blobToString(row.key);
+      let value = blobToString(row.value);
+      try { value = JSON.parse(value); } catch { /* keep as string */ }
+      kvMetadata[key] = value;
+    }
+    if (kvMetadata.geo && typeof kvMetadata.geo === 'object') {
+      geoMetadata = kvMetadata.geo;
+    }
+  } catch (e) {
+    console.warn('Could not read KV metadata:', e.message);
+  }
+
+  // 4. File metadata (parquet_schema — lightweight, footer cached)
+  let fileMetadata = null;
+  try {
+    const fileResult = await query(`SELECT * FROM parquet_schema('${escaped}')`);
+    fileMetadata = fileResult.toArray().map((row) => {
+      const obj = {};
+      for (const field of fileResult.schema.fields) {
+        const v = row[field.name];
+        obj[field.name] = typeof v === 'bigint' ? Number(v) : v;
+      }
+      return obj;
+    });
+  } catch (e) {
+    console.warn('Could not read file metadata:', e.message);
+  }
+
+  return { schema, totalRows, rowGroupSize, kvMetadata, geoMetadata, fileMetadata };
 }
 
 /**
@@ -298,7 +410,7 @@ export async function queryCount(
  */
 export async function queryData(
   source,
-  { geoColumn = null, filters = [], bbox = null, sourceCrs = null, limit = null, offset = 0, alreadyGeometry = null } = {}
+  { geoColumn = null, filters = [], bbox = null, sourceCrs = null, limit = null, offset = 0, alreadyGeometry = null, columns = null } = {}
 ) {
   const escaped = escapeSource(source);
 
@@ -334,7 +446,15 @@ export async function queryData(
     pagination = ` OFFSET ${offset}`;
   }
 
-  const sql = `SELECT *${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
+  // Select only requested columns (+ geo) instead of * when a column list is provided.
+  // This avoids fetching large unused columns (bbox structs, binary blobs, etc.)
+  // and significantly reduces data transfer for wide tables.
+  let selectCols = '*';
+  if (columns && columns.length > 0) {
+    selectCols = columns.map((c) => `"${c}"`).join(', ');
+  }
+
+  const sql = `SELECT ${selectCols}${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
 
   return query(sql);
 }

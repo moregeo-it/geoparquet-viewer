@@ -1,5 +1,14 @@
 <template>
-  <div ref="mapContainer" class="map-container"></div>
+  <div ref="mapContainer" class="map-container">
+    <button
+      v-if="viewportStale"
+      class="reload-viewport-btn"
+      :disabled="loading"
+      @click="$emit('reloadViewport')"
+    >
+      Reload viewport
+    </button>
+  </div>
 </template>
 
 <script>
@@ -10,6 +19,7 @@ import {
   GeoArrowPolygonLayer,
   GeoArrowScatterplotLayer
 } from '@geoarrow/deck.gl-layers';
+import { parseWKB } from '@walkthru-earth/objex-utils';
 
 const NORMAL_FILL = [51, 153, 204, 120];
 const NORMAL_LINE = [51, 153, 204, 200];
@@ -22,9 +32,11 @@ export default {
     geoArrowResults: { type: Array, default: () => [] },
     selectedIndex: { type: Number, default: null },
     bounds: { type: Array, default: null },
-    geometryBoundsByIndex: { type: Object, default: () => ({}) }
+    wkbByIndex: { type: Object, default: () => ({}) },
+    viewportStale: { type: Boolean, default: false },
+    loading: { type: Boolean, default: false }
   },
-  emits: ['select', 'viewportChange'],
+  emits: ['select', 'viewportChange', 'reloadViewport'],
   data() {
     return {
       map: null,
@@ -33,13 +45,14 @@ export default {
       moveEndTimer: null
     };
   },
+  created() {
+    // Non-reactive cache for lazily computed feature bounds.
+    this.geoBoundsCache = {};
+  },
   watch: {
     geoArrowResults: {
       handler() {
         this.updateLayers();
-        if (this.bounds) {
-          this.fitBounds();
-        }
       }
     },
     selectedIndex() {
@@ -260,8 +273,29 @@ export default {
     zoomToFeature(index) {
       if (!this.map) return;
 
-      const bounds = this.geometryBoundsByIndex?.[index];
-      if (!bounds) return;
+      // Lazy bounds: compute from WKB only when needed, then cache.
+      let bounds = this.geoBoundsCache[index];
+      if (!bounds) {
+        const wkb = this.wkbByIndex[index];
+        if (!wkb) return;
+        const geometry = parseWKB(wkb);
+        if (!geometry?.coordinates) return;
+        let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+        const visit = (c) => {
+          if (typeof c[0] === 'number' && typeof c[1] === 'number') {
+            if (c[0] < west) west = c[0];
+            if (c[1] < south) south = c[1];
+            if (c[0] > east) east = c[0];
+            if (c[1] > north) north = c[1];
+            return;
+          }
+          for (const child of c) visit(child);
+        };
+        visit(geometry.coordinates);
+        if (!isFinite(west)) return;
+        bounds = [west, south, east, north];
+        this.geoBoundsCache[index] = bounds;
+      }
 
       const [[w, s], [e, n]] = [
         [bounds[0], bounds[1]],
@@ -295,5 +329,32 @@ export default {
 .map-container {
   width: 100%;
   height: 100%;
+  position: relative;
+}
+
+.reload-viewport-btn {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 6px 16px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.reload-viewport-btn:hover {
+  background: #1565c0;
+}
+
+.reload-viewport-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 </style>

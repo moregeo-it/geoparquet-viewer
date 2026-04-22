@@ -103,9 +103,12 @@
               :geo-arrow-results="geoArrowResults"
               :selectedIndex="selectedIndex"
               :bounds="mapBounds"
-              :geometry-bounds-by-index="geometryBoundsByIndex"
+              :wkb-by-index="wkbByIndex"
+              :viewport-stale="viewportStale"
+              :loading="loading"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
+              @reloadViewport="reloadForViewport"
             />
           </div>
         </div>
@@ -169,15 +172,11 @@ import {
   initDB,
   registerLocalFile,
   dropFile,
-  getSchema,
-  getRowCount,
-  getKVMetadata,
-  getRowGroupSize,
-  getParquetFileMetadata,
+  bootstrapMetadata,
   queryData,
   queryCount
 } from './db.js';
-import { buildGeoArrowTables, parseWKB, formatValue, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
+import { buildGeoArrowTables, formatValue, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -196,26 +195,6 @@ function normalizeDisplayValue(value) {
   if (value === null || value === undefined) return value;
   if (ArrayBuffer.isView(value)) return `[binary ${value.byteLength}B]`;
   return formatValue(value);
-}
-
-function boundsFromWkb(wkb) {
-  const geometry = parseWKB(wkb);
-  if (!geometry) return null;
-  const coords = geometry.coordinates;
-  if (!coords) return null;
-  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
-  const visit = (c) => {
-    if (typeof c[0] === 'number' && typeof c[1] === 'number') {
-      if (c[0] < west) west = c[0];
-      if (c[1] < south) south = c[1];
-      if (c[0] > east) east = c[0];
-      if (c[1] > north) north = c[1];
-      return;
-    }
-    for (const child of c) visit(child);
-  };
-  visit(coords);
-  return isFinite(west) ? [west, south, east, north] : null;
 }
 
 function getDefaultUrl() {
@@ -253,7 +232,7 @@ export default {
       rows: [],
       geoArrowResults: [],
       mapBounds: null,
-      geometryBoundsByIndex: {},
+      wkbByIndex: {},
 
       // Selection
       selectedIndex: null,
@@ -269,8 +248,8 @@ export default {
 
       // Viewport
       viewportBounds: null,
-      pendingViewportReload: false,
       viewportGeneration: 0,
+      viewportStale: false,
 
       // UI state
       loading: false,
@@ -436,7 +415,7 @@ export default {
       this.rows = [];
       this.geoArrowResults = [];
       this.mapBounds = null;
-      this.geometryBoundsByIndex = {};
+      this.wkbByIndex = {};
       this.mapFeatureCount = 0;
       this.selectedIndex = null;
       this.filters = [];
@@ -444,6 +423,7 @@ export default {
       this.currentOffset = 0;
       this.isError = false;
       this.statusMessage = '';
+      this.viewportStale = false;
     },
 
     async loadData() {
@@ -452,35 +432,15 @@ export default {
         this.setStatus('Initializing DuckDB...');
         await initDB((msg) => this.setStatus(msg));
 
-        this.setStatus('Reading schema...');
-        this.schema = await getSchema(this.source);
-
-        this.setStatus('Counting rows...');
-        this.totalRows = await getRowCount(this.source);
-
-        this.setStatus('Reading metadata...');
-        try {
-          this.kvMetadata = await getKVMetadata(this.source);
-          if (this.kvMetadata.geo && typeof this.kvMetadata.geo === 'object') {
-            this.geoMetadata = this.kvMetadata.geo;
-          }
-        } catch (e) {
-          console.warn('Could not read KV metadata:', e.message);
-        }
-
-        try {
-          this.fileMetadata = await getParquetFileMetadata(this.source);
-        } catch (e) {
-          console.warn('Could not read file metadata:', e.message);
-        }
-
-        try {
-          const rowGroupSize = await getRowGroupSize(this.source);
-          if (rowGroupSize !== null) {
-            this.pageSize = Math.max(MIN_PAGE_SIZE, Math.min(rowGroupSize, DEFAULT_PAGE_SIZE));
-          }
-        } catch (e) {
-          console.warn('Could not read row group size:', e.message);
+        // Single bootstrap: schema + row count + row group size + KV/geo/file metadata.
+        const meta = await bootstrapMetadata(this.source, (msg) => this.setStatus(msg));
+        this.schema = meta.schema;
+        this.totalRows = meta.totalRows;
+        this.kvMetadata = meta.kvMetadata;
+        this.geoMetadata = meta.geoMetadata;
+        this.fileMetadata = meta.fileMetadata;
+        if (meta.rowGroupSize !== null) {
+          this.pageSize = Math.max(MIN_PAGE_SIZE, Math.min(meta.rowGroupSize, DEFAULT_PAGE_SIZE));
         }
 
         this.setStatus('Loading data...');
@@ -494,10 +454,6 @@ export default {
         this.setStatus(`Error: ${e.message}`, true);
       } finally {
         this.loading = false;
-        if (this.pendingViewportReload && this.hasBboxCovering) {
-          this.pendingViewportReload = false;
-          this.reloadForViewport();
-        }
       }
     },
 
@@ -543,7 +499,7 @@ export default {
       try {
         this.rows = [];
         this.geoArrowResults = [];
-        this.geometryBoundsByIndex = {};
+        this.wkbByIndex = {};
         this.mapBounds = null;
         this.currentOffset = 0;
         this.selectedIndex = null;
@@ -574,22 +530,30 @@ export default {
      * Execute query and append results to rows and GeoArrow map data.
      */
     async executeQuery(offset, limit = this.pageSize) {
+      // Build explicit column list: table columns + geo column.
+      // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
+      const tableColNames = this.nonGeoColumns.map((c) => c.name);
+      const geoCol = this.primaryGeoColumn;
+      const selectColumns = geoCol
+        ? [...tableColNames, geoCol]
+        : tableColNames;
+
       const result = await queryData(this.source, {
-        geoColumn: this.primaryGeoColumn,
+        geoColumn: geoCol,
         filters: this.filters,
         bbox: this.hasBboxCovering ? this.viewportBounds : null,
         sourceCrs: this.sourceCrsString,
+        columns: selectColumns,
         limit,
         offset
       });
 
       const arrowRows = result.toArray();
       const fieldNames = result.schema.fields.map((f) => f.name);
-      const geoCol = this.primaryGeoColumn;
 
       const newRows = [];
       const mapWkbArrays = [];
-      const mapGeometryBounds = {};
+      const newWkbByIndex = {};
       const mapIndices = [];
 
       for (let i = 0; i < arrowRows.length; i++) {
@@ -609,11 +573,7 @@ export default {
         if (geoCol) {
           const wkb = toBinary(arrowRow.__wkb ?? arrowRow[geoCol]);
           if (wkb) {
-            const bounds = boundsFromWkb(wkb);
-            if (bounds) {
-              mapGeometryBounds[globalIndex] = bounds;
-            }
-
+            newWkbByIndex[globalIndex] = wkb;
             mapWkbArrays.push(wkb);
             mapIndices.push(globalIndex);
           }
@@ -629,29 +589,19 @@ export default {
         const geoArrowResults = buildGeoArrowTables(mapWkbArrays, attributes);
 
         this.geoArrowResults = [...this.geoArrowResults, ...geoArrowResults];
-        this.geometryBoundsByIndex = { ...this.geometryBoundsByIndex, ...mapGeometryBounds };
-
-        if (offset === 0) {
-          const firstResult = geoArrowResults[0];
-          if (firstResult) {
-            const [minX, minY, maxX, maxY] = firstResult.bounds;
-            this.mapBounds = [[minX, minY], [maxX, maxY]];
-          }
-        }
+        Object.assign(this.wkbByIndex, newWkbByIndex);
       }
 
       this.currentOffset = offset + arrowRows.length;
       this.lastPageFull = limit ? arrowRows.length >= limit : false;
 
-      // Set map bounds on first load
-      if (offset === 0 && this.geoArrowResults.length > 0) {
+      // Set map bounds on first load (skip if already set, e.g. viewport reload)
+      if (offset === 0 && !this.mapBounds && this.geoArrowResults.length > 0) {
         const geoColMeta = this.geoMetadata?.columns?.[geoCol];
-        // Only use the metadata bbox directly when data is WGS84 (no reprojection).
-        // When reprojecting, bbox in metadata is in source CRS and must not be used directly.
         if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
           const [minx, miny, maxx, maxy] = geoColMeta.bbox;
           this.mapBounds = [[minx, miny], [maxx, maxy]];
-        } else if (!this.mapBounds) {
+        } else {
           const firstResult = this.geoArrowResults[0];
           if (firstResult) {
             const [minX, minY, maxX, maxY] = firstResult.bounds;
@@ -677,21 +627,21 @@ export default {
     onViewportChange(bbox) {
       this.viewportBounds = bbox;
       if (!this.source || !this.hasBboxCovering) return;
-      if (this.loading) {
-        this.pendingViewportReload = true;
-        return;
+      // Mark viewport as stale — user decides when to reload.
+      if (this.rows.length > 0) {
+        this.viewportStale = true;
       }
-      this.reloadForViewport();
     },
 
     async reloadForViewport() {
+      this.viewportStale = false;
       const gen = ++this.viewportGeneration;
       this.loading = true;
       try {
         this.rows = [];
         this.geoArrowResults = [];
-        this.geometryBoundsByIndex = {};
-        this.mapBounds = null;
+        this.wkbByIndex = {};
+        // Keep mapBounds — the map is already at the right viewport.
         this.currentOffset = 0;
         this.selectedIndex = null;
 

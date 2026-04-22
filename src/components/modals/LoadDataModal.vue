@@ -80,6 +80,10 @@ export default {
         {
           url: 'https://data.source.coop/fiboa/de-bb/dfbk.parquet',
           title: 'Building footprints Berlin / Brandenburg (large, polygons)'
+        },
+        {
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/japan/japan.parquet',
+          title: 'Field boundaries for Japan (very large, polygons)'
         }
       ]
     };
