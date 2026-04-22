@@ -1,13 +1,5 @@
 <template>
   <v-app>
-    <v-progress-linear
-      v-if="loading"
-      indeterminate
-      color="primary"
-      height="3"
-      style="position: fixed; top: 0; z-index: 9999"
-    />
-
     <v-app-bar color="grey-darken-3" density="compact" flat>
       <v-app-bar-title class="text-body-1 font-weight-bold flex-grow-0 mr-4">
         GeoParquet Viewer
@@ -41,27 +33,38 @@
 
     <v-main>
       <div class="d-flex flex-column fill-height">
-        <v-toolbar
-          v-if="source"
-          density="compact"
-          color="grey-darken-1"
-          flat
-          class="flex-grow-0"
-        >
-          <v-toolbar-title class="text-caption">
-            <code>{{ displaySource }}</code>
-          </v-toolbar-title>
-          <v-spacer />
-          <span class="text-caption text-grey-lighten-1 mr-3">
-            <template v-if="filteredCount !== null && filteredCount !== totalRows">
-              {{ filteredCount.toLocaleString() }} matched &middot;
-            </template>
-            {{ loadedCount.toLocaleString() }} loaded /
-            {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
-          </span>
-        </v-toolbar>
+        <div v-if="source" class="source-toolbar-wrapper flex-grow-0">
+          <v-toolbar
+            density="compact"
+            color="grey-darken-1"
+            flat
+          >
+            <v-toolbar-title class="text-caption">
+              <code>{{ displaySource }}</code>
+            </v-toolbar-title>
+            <v-spacer />
+            <span v-if="!initialLoading && statusMessage" class="text-caption mr-3" :class="isError ? 'text-error' : 'text-grey-lighten-2'">
+              {{ statusMessage }}
+            </span>
+            <span class="text-caption text-grey-lighten-1 mr-3">
+              <template v-if="filteredCount !== null && filteredCount !== totalRows">
+                {{ filteredCount.toLocaleString() }} matched &middot;
+              </template>
+              {{ loadedCount.toLocaleString() }} loaded /
+              {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
+            </span>
+          </v-toolbar>
+          <v-progress-linear
+            v-if="loading && !initialLoading"
+            indeterminate
+            color="primary"
+            height="7"
+            class="toolbar-progress"
+          />
+        </div>
 
-        <div v-if="source" class="content-panels d-flex flex-grow-1" style="min-height: 0">
+        <div v-if="source" class="content-panels d-flex flex-grow-1" style="min-height: 0; position: relative">
+          <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
           <div class="left-panel d-flex flex-column">
             <FilterPanel
               v-if="nonGeoColumns.length > 0"
@@ -126,15 +129,6 @@
       </div>
     </v-main>
 
-    <v-sheet
-      v-if="statusMessage"
-      :color="isError ? 'error' : 'grey-darken-3'"
-      class="status-bar text-caption px-3 d-flex align-center"
-      :class="isError ? 'text-white' : 'text-grey-lighten-1'"
-    >
-      {{ statusMessage }}
-    </v-sheet>
-
     <LoadDataModal
       v-model="loadDialogOpen"
       :url="source || ''"
@@ -172,6 +166,7 @@ import { buildGeoArrowTables, parseWKB, formatValue, toBinary, findGeoColumn } f
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
 import FilterPanel from './components/FilterPanel.vue';
+import LoadingOverlay from './components/LoadingOverlay.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
@@ -218,6 +213,7 @@ export default {
     MapView,
     TableView,
     FilterPanel,
+    LoadingOverlay,
     AboutModal,
     LoadDataModal,
     MetadataModal,
@@ -330,6 +326,10 @@ export default {
       return this.schema.filter(
         (col) => !this.geoColumns.includes(col.name) && !col.name.startsWith('__')
       );
+    },
+    /** True during initial load before any data is available */
+    initialLoading() {
+      return this.loading && this.rows.length === 0;
     },
     /** Number of rows currently loaded */
     loadedCount() {
@@ -692,8 +692,18 @@ export default {
 }
 
 /* Ensure content-panels fills all available space */
+.source-toolbar-wrapper {
+  position: relative;
+}
+.toolbar-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
 .content-panels {
-  height: calc(100vh - 48px - 48px - 24px); /* 100vh - appbar(48px) - toolbar(48px) - statusbar(24px) */
+  height: calc(100vh - 48px - 48px); /* 100vh - appbar(48px) - toolbar(48px) */
   overflow: hidden;
 }
 
@@ -721,19 +731,10 @@ export default {
   height: 100%;
 }
 
-.status-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 24px;
-  z-index: 500;
-}
-
 @media (max-width: 768px) {
   .content-panels {
     flex-direction: column !important;
-    height: calc(100vh - 48px - 48px - 24px);
+    height: calc(100vh - 48px - 48px);
   }
   .left-panel {
     width: 100% !important;
