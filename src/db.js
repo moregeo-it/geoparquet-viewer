@@ -238,6 +238,23 @@ export async function getParquetFileMetadata(source) {
 }
 
 /**
+ * Get the first row group's row count from a Parquet file.
+ * Uses a minimal query — fetches a single scalar value.
+ * @param {string} source - Parquet source path.
+ * @returns {Promise<number|null>} Row count of the first row group, or null if unavailable.
+ */
+export async function getRowGroupSize(source) {
+  const escaped = escapeSource(source);
+  const result = await query(
+    `SELECT row_group_num_rows FROM parquet_metadata('${escaped}') LIMIT 1`
+  );
+  const rows = result.toArray();
+  if (rows.length === 0) return null;
+  const size = Number(rows[0].row_group_num_rows);
+  return size > 0 ? size : null;
+}
+
+/**
  * Get the count of rows matching the given filters and optional bbox.
  */
 export async function queryCount(

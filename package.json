@@ -14,25 +14,25 @@
     "@deck.gl/layers": "^9.3.0",
     "@deck.gl/mapbox": "^9.3.0",
     "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
-    "@mdi/font": "^7.4.47",
     "@geoarrow/deck.gl-layers": "^0.3.2",
+    "@mdi/font": "^7.4.47",
     "@walkthru-earth/objex-utils": "^1.1.0",
     "apache-arrow": "^21.1.0",
-    "maplibre-gl": "^4.7.0",
-    "yaml": "^2.8.3",
+    "maplibre-gl": "^5.23.0",
     "vue": "^3.5.22",
-    "vuetify": "^3.11.8"
+    "vuetify": "^4.0.6",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
-    "@eslint/js": "^9.33.0",
+    "@eslint/js": "^10.0.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/eslint-config-prettier": "^10.2.0",
-    "eslint": "^9.33.0",
-    "eslint-plugin-vue": "~10.4.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-vue": "^10.9.0",
     "globals": "^16.3.0",
-    "prettier": "3.6.2",
+    "prettier": "^3.8.3",
     "sass": "^1.77.0",
-    "vite": "^7.1.7",
+    "vite": "^8.0.9",
     "vite-plugin-vuetify": "^2.1.3"
   }
 }

@@ -157,6 +157,7 @@ import {
   getSchema,
   getRowCount,
   getKVMetadata,
+  getRowGroupSize,
   getParquetFileMetadata,
   queryData,
   queryCount
@@ -173,8 +174,8 @@ import LoadDataModal from './components/modals/LoadDataModal.vue';
 import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 
-const DEFAULT_PAGE_SIZE = 10000;
-const MAX_FEATURES_ON_MAP = 100000;
+const MIN_PAGE_SIZE = 1000;
+const DEFAULT_PAGE_SIZE = 100000;
 
 function normalizeDisplayValue(value) {
   if (value === null || value === undefined) return value;
@@ -238,7 +239,6 @@ export default {
       geoArrowResults: [],
       mapBounds: null,
       geometryBoundsByIndex: {},
-      mapFeatureCount: 0,
 
       // Selection
       selectedIndex: null,
@@ -458,6 +458,15 @@ export default {
           console.warn('Could not read file metadata:', e.message);
         }
 
+        try {
+          const rowGroupSize = await getRowGroupSize(this.source);
+          if (rowGroupSize !== null) {
+            this.pageSize = Math.max(MIN_PAGE_SIZE, Math.min(rowGroupSize, DEFAULT_PAGE_SIZE));
+          }
+        } catch (e) {
+          console.warn('Could not read row group size:', e.message);
+        }
+
         this.setStatus('Loading data...');
         await this.executeQuery(0);
 
@@ -511,7 +520,6 @@ export default {
         this.rows = [];
         this.geoArrowResults = [];
         this.geometryBoundsByIndex = {};
-        this.mapFeatureCount = 0;
         this.mapBounds = null;
         this.currentOffset = 0;
         this.selectedIndex = null;
@@ -582,10 +590,8 @@ export default {
               mapGeometryBounds[globalIndex] = bounds;
             }
 
-            if (this.mapFeatureCount + mapWkbArrays.length < MAX_FEATURES_ON_MAP) {
-              mapWkbArrays.push(wkb);
-              mapIndices.push(globalIndex);
-            }
+            mapWkbArrays.push(wkb);
+            mapIndices.push(globalIndex);
           }
         }
       }
@@ -599,7 +605,6 @@ export default {
         const geoArrowResults = buildGeoArrowTables(mapWkbArrays, attributes);
 
         this.geoArrowResults = [...this.geoArrowResults, ...geoArrowResults];
-        this.mapFeatureCount += mapWkbArrays.length;
         this.geometryBoundsByIndex = { ...this.geometryBoundsByIndex, ...mapGeometryBounds };
 
         if (offset === 0) {
@@ -662,7 +667,6 @@ export default {
         this.rows = [];
         this.geoArrowResults = [];
         this.geometryBoundsByIndex = {};
-        this.mapFeatureCount = 0;
         this.mapBounds = null;
         this.currentOffset = 0;
         this.selectedIndex = null;
