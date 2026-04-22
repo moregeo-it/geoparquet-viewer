@@ -90,7 +90,7 @@
                 v-if="remainingRows > pageSize"
                 size="small"
                 variant="outlined"
-                @click="loadAll"
+                @click="confirmLoadAllIfLarge"
                 :disabled="loading"
               >
                 Load all remaining
@@ -146,6 +146,21 @@
       :data="metadataDialogData"
     />
     <AboutModal v-model="aboutDialogOpen" />
+
+    <v-dialog v-model="confirmLoadAllOpen" max-width="420">
+      <v-card>
+        <v-card-title class="text-h6">Loading all remaining data?</v-card-title>
+        <v-card-text class="text-body-2">
+          There are <strong>{{ remainingRows.toLocaleString() }}</strong> rows left to load.
+          This may take a while and could use significant memory.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="confirmLoadAllOpen = false">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" @click="confirmLoadAllOpen = false; loadAll()">Load All</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
@@ -267,6 +282,7 @@ export default {
       schemaDialogOpen: false,
       metadataDialogOpen: false,
       aboutDialogOpen: false,
+      confirmLoadAllOpen: false,
 
       // Metadata dialog content (shared by KV / Geo / File metadata)
       metadataDialogTitle: '',
@@ -496,6 +512,14 @@ export default {
         this.setStatus(`Error loading more: ${e.message}`, true);
       } finally {
         this.loading = false;
+      }
+    },
+
+    confirmLoadAllIfLarge() {
+      if (this.remainingRows > this.pageSize) {
+        this.confirmLoadAllOpen = true;
+      } else {
+        this.loadAll();
       }
     },
 

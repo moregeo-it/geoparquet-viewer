@@ -320,6 +320,8 @@ export async function queryData(
   let pagination = '';
   if (limit) {
     pagination = ` LIMIT ${limit} OFFSET ${offset}`;
+  } else if (offset > 0) {
+    pagination = ` OFFSET ${offset}`;
   }
 
   const sql = `SELECT *${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
