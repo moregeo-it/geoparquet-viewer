@@ -53,6 +53,9 @@
               {{ loadedCount.toLocaleString() }} loaded /
               {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
             </span>
+            <v-icon v-if="schema" size="small" variant="text" class="mr-3" @click="reopenQuerySettings">
+              mdi-cog
+            </v-icon>
           </v-toolbar>
           <v-progress-linear
             v-if="loading && !initialLoading"
@@ -67,14 +70,14 @@
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
           <div class="left-panel d-flex flex-column">
             <FilterPanel
-              v-if="nonGeoColumns.length > 0"
-              :columns="nonGeoColumns"
+              v-if="visibleColumns.length > 0"
+              :columns="visibleColumns"
               :filters="filters"
               @apply="applyFilters"
             />
             <TableView
               :rows="rows"
-              :columns="nonGeoColumns"
+              :columns="visibleColumns"
               :selectedIndex="selectedIndex"
               @select="onTableSelect"
             />
@@ -149,6 +152,15 @@
       :data="metadataDialogData"
     />
     <AboutModal v-model="aboutDialogOpen" />
+    <QuerySettingsModal
+      v-model="querySettingsOpen"
+      :schema="schema || []"
+      :geo-columns="geoColumns"
+      :total-rows="totalRows"
+      :has-bbox-covering="hasBboxCovering"
+      :defaults="querySettingsDefaults"
+      @apply="applyQuerySettings"
+    />
 
     <v-dialog v-model="confirmLoadAllOpen" max-width="420">
       <v-card>
@@ -187,6 +199,7 @@ import AboutModal from './components/modals/AboutModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
 import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
+import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
 
 const MIN_PAGE_SIZE = 1000;
 const DEFAULT_PAGE_SIZE = 10000;
@@ -212,6 +225,7 @@ export default {
     AboutModal,
     LoadDataModal,
     MetadataModal,
+    QuerySettingsModal,
     SchemaModal
   },
   data() {
@@ -256,12 +270,17 @@ export default {
       statusMessage: '',
       isError: false,
 
+      // Query settings (user preferences applied before first query)
+      selectedColumns: null,
+      spatialFilterEnabled: true,
+
       // Dialog visibility
       loadDialogOpen: false,
       schemaDialogOpen: false,
       metadataDialogOpen: false,
       aboutDialogOpen: false,
       confirmLoadAllOpen: false,
+      querySettingsOpen: false,
 
       // Metadata dialog content (shared by KV / Geo / File metadata)
       metadataDialogTitle: '',
@@ -337,7 +356,38 @@ export default {
         (col) => !this.geoColumns.includes(col.name) && !col.name.startsWith('__')
       );
     },
+    /** Columns visible to the user — filtered by selectedColumns when set */
+    visibleColumns() {
+      if (!this.selectedColumns) return this.nonGeoColumns;
+      const selected = new Set(this.selectedColumns);
+      return this.nonGeoColumns.filter((col) => selected.has(col.name));
+    },
+    /** Whether spatial viewport filtering is currently active */
+    spatialFilterActive() {
+      return this.hasBboxCovering && this.spatialFilterEnabled;
+    },
+    /** Defaults passed to the QuerySettingsModal */
+    querySettingsDefaults() {
+      const col = this.primaryGeoColumn;
+      const colMeta = this.geoMetadata?.columns?.[col];
+      const geomTypes = colMeta?.geometry_types;
+      const geometryType = geomTypes?.length ? geomTypes.join(', ') : null;
+      const crs = this.primaryGeoCrs;
+      let crsLabel = 'WGS 84';
+      if (crs) {
+        if (crs.name) crsLabel = crs.name;
+        else if (crs.id) crsLabel = `${crs.id.authority}:${crs.id.code}`;
+      }
+      return {
+        selectedColumns: this.selectedColumns,
+        pageSize: this.pageSize,
+        spatialFilterEnabled: this.spatialFilterEnabled,
+        geometryType,
+        crsLabel
+      };
+    },
     /** True during initial load before any data is available */
+
     initialLoading() {
       return this.loading && this.rows.length === 0;
     },
@@ -347,7 +397,7 @@ export default {
     },
     /** Whether there are more rows to load */
     hasMore() {
-      if (this.hasBboxCovering && this.viewportBounds && this.filteredCount === null) {
+      if (this.spatialFilterActive && this.viewportBounds && this.filteredCount === null) {
         return this.lastPageFull;
       }
       if (this.filteredCount !== null) {
@@ -407,13 +457,14 @@ export default {
       history.pushState({}, '', window.location.pathname);
       this.reset();
       const name = 'local_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      this.source = name;
+      this.displaySource = file.name;
+      this.loading = true;
       this.setStatus(`Reading file ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...`);
       try {
         const buffer = await file.arrayBuffer();
         await registerLocalFile(name, buffer);
         this.localFileName = name;
-        this.source = name;
-        this.displaySource = file.name;
         await this.loadData();
       } catch (e) {
         this.setStatus(`Failed to load file: ${e.message}`, true);
@@ -445,6 +496,8 @@ export default {
       this.isError = false;
       this.statusMessage = '';
       this.viewportStale = false;
+      this.selectedColumns = null;
+      this.spatialFilterEnabled = true;
     },
 
     async loadData() {
@@ -464,18 +517,49 @@ export default {
           this.pageSize = Math.max(MIN_PAGE_SIZE, Math.min(meta.rowGroupSize, DEFAULT_PAGE_SIZE));
         }
 
+        // Pause: let the user choose columns, page size, etc.
+        this.setStatus('Ready — configure query settings.');
+        this.loading = false;
+        this.querySettingsOpen = true;
+      } catch (e) {
+        console.error('Load error:', e);
+        this.setStatus(`Error: ${e.message}`, true);
+        this.loading = false;
+      }
+    },
+
+    async applyQuerySettings(settings) {
+      this.selectedColumns = settings.selectedColumns;
+      this.pageSize = settings.pageSize;
+      this.spatialFilterEnabled = settings.spatialFilterEnabled;
+
+      // Clear any previous data (relevant when re-opening settings)
+      this.rows = [];
+      this.geoArrowResults = [];
+      this.wkbByIndex = {};
+      this.mapBounds = null;
+      this.currentOffset = 0;
+      this.selectedIndex = null;
+      this.filteredCount = null;
+      this.filters = [];
+
+      this.loading = true;
+      try {
         this.setStatus('Loading data...');
         await this.executeQuery(0);
-
         this.setStatus(
           `Loaded ${this.loadedCount.toLocaleString()} of ${this.totalRows.toLocaleString()} rows.`
         );
       } catch (e) {
-        console.error('Load error:', e);
+        console.error('Query error:', e);
         this.setStatus(`Error: ${e.message}`, true);
       } finally {
         this.loading = false;
       }
+    },
+
+    reopenQuerySettings() {
+      this.querySettingsOpen = true;
     },
 
     async loadMore() {
@@ -529,7 +613,7 @@ export default {
         this.filteredCount = await queryCount(
           this.source,
           this.filters,
-          this.hasBboxCovering ? this.viewportBounds : null,
+          this.spatialFilterActive ? this.viewportBounds : null,
           this.primaryGeoColumn,
           this.sourceCrsString
         );
@@ -551,9 +635,9 @@ export default {
      * Execute query and append results to rows and GeoArrow map data.
      */
     async executeQuery(offset, limit = this.pageSize) {
-      // Build explicit column list: table columns + geo column.
+      // Build explicit column list: visible columns + geo column.
       // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
-      const tableColNames = this.nonGeoColumns.map((c) => c.name);
+      const tableColNames = this.visibleColumns.map((c) => c.name);
       const geoCol = this.primaryGeoColumn;
       const selectColumns = geoCol
         ? [...tableColNames, geoCol]
@@ -562,7 +646,7 @@ export default {
       const result = await queryData(this.source, {
         geoColumn: geoCol,
         filters: this.filters,
-        bbox: this.hasBboxCovering ? this.viewportBounds : null,
+        bbox: this.spatialFilterActive ? this.viewportBounds : null,
         sourceCrs: this.sourceCrsString,
         columns: selectColumns,
         limit,
@@ -660,7 +744,7 @@ export default {
     // ── Viewport-driven spatial filtering ──────────────────
     onViewportChange(bbox) {
       this.viewportBounds = bbox;
-      if (!this.source || !this.hasBboxCovering) return;
+      if (!this.source || !this.spatialFilterActive) return;
       // Mark viewport as stale — user decides when to reload.
       if (this.rows.length > 0) {
         this.viewportStale = true;
