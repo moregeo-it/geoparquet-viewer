@@ -50,7 +50,7 @@
         </v-btn>
       </div>
       <div class="mt-1">
-        <v-btn size="x-small" color="primary" variant="flat" @click="apply">
+        <v-btn size="small" color="primary" variant="flat" @click="apply">
           Apply Filters
         </v-btn>
       </div>

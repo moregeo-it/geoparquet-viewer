@@ -16,6 +16,7 @@
     "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
     "@geoarrow/deck.gl-layers": "^0.3.2",
     "@mdi/font": "^7.4.47",
+    "@theace0296/vue-snotify": "^4.0.4",
     "@walkthru-earth/objex-utils": "^1.1.0",
     "apache-arrow": "^21.1.0",
     "maplibre-gl": "^5.23.0",

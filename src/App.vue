@@ -43,9 +43,6 @@
               {{ displaySource }}
             </v-toolbar-title>
             <v-spacer />
-            <span v-if="!initialLoading && statusMessage" class="text-caption mr-3" :class="isError ? 'text-error' : 'text-grey-lighten-2'">
-              {{ statusMessage }}
-            </span>
             <span class="text-caption text-grey-lighten-1 mr-3">
               <template v-if="filteredCount !== null && filteredCount !== totalRows">
                 {{ filteredCount.toLocaleString() }} matched &middot;
@@ -65,6 +62,8 @@
             class="toolbar-progress"
           />
         </div>
+
+        <vue-snotify />
 
         <div v-if="source" class="content-panels d-flex flex-grow-1" style="min-height: 0; position: relative">
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
@@ -189,6 +188,7 @@ import {
   queryCount
 } from './db.js';
 import { buildGeoArrowTables, formatValue, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
+import { friendlyError } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -268,7 +268,6 @@ export default {
       // UI state
       loading: false,
       statusMessage: '',
-      isError: false,
 
       // Query settings (user preferences applied before first query)
       selectedColumns: null,
@@ -386,11 +385,12 @@ export default {
         crsLabel
       };
     },
-    /** True during initial load before any data is available */
+    /** True only during the very first load (no schema yet) */
 
     initialLoading() {
-      return this.loading && this.rows.length === 0;
+      return this.loading && !this.schema;
     },
+
     /** Number of rows currently loaded */
     loadedCount() {
       return this.rows.length;
@@ -411,6 +411,9 @@ export default {
       return Math.max(0, total - this.loadedCount);
     }
   },
+  created() {
+    this._progressToastId = null;
+  },
   mounted() {
     const url = getDefaultUrl();
     if (url) {
@@ -419,16 +422,7 @@ export default {
       this.loadDialogOpen = true;
     }
   },
-  watch: {
-    loading(newVal, oldVal) {
-      if (oldVal && !newVal && this.statusMessage && !this.isError) {
-        if (this._statusTimer) clearTimeout(this._statusTimer);
-        this._statusTimer = setTimeout(() => {
-          if (!this.loading) this.statusMessage = '';
-        }, 3000);
-      }
-    },
-  },
+  watch: {},
   methods: {
     // ── Dialog helpers ─────────────────────────────────────
     openMetadataDialog(title, data) {
@@ -437,11 +431,40 @@ export default {
       this.metadataDialogOpen = true;
     },
 
-    // ── Status ────────────────────────────────────────────
-    setStatus(msg, error = false) {
+    // ── Status & notifications ─────────────────────────────
+    setStatus(msg) {
       this.statusMessage = msg;
-      this.isError = error;
-      if (this._statusTimer) clearTimeout(this._statusTimer);
+      if (!this.initialLoading) {
+        this._dismissProgress();
+        this._progressToastId = this.$snotify.info(msg, { timeout: 0, closeOnClick: false })?.id ?? null;
+      }
+    },
+
+    notify(title, detail = '', type = 'success') {
+      this.statusMessage = '';
+      this._dismissProgress();
+      const body = [detail].filter(Boolean).join('\n');
+      this.$snotify[type]?.(body, title) ?? this.$snotify.success(body, title);
+    },
+
+    setError(err) {
+      this.statusMessage = '';
+      this._dismissProgress();
+      const info = friendlyError(err);
+      const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
+      this.$snotify.error(
+        body,
+        info.title,
+        { timeout: 0, closeOnClick: true }
+      );
+    },
+
+
+    _dismissProgress() {
+      if (this._progressToastId != null) {
+        this.$snotify.remove(this._progressToastId, true);
+        this._progressToastId = null;
+      }
     },
 
     // ── Data loading ──────────────────────────────────────
@@ -467,7 +490,7 @@ export default {
         this.localFileName = name;
         await this.loadData();
       } catch (e) {
-        this.setStatus(`Failed to load file: ${e.message}`, true);
+        this.setError(e);
         this.loading = false;
       }
     },
@@ -493,8 +516,9 @@ export default {
       this.filters = [];
       this.filteredCount = null;
       this.currentOffset = 0;
-      this.isError = false;
       this.statusMessage = '';
+      this.$snotify.clear();
+      this._progressToastId = null;
       this.viewportStale = false;
       this.selectedColumns = null;
       this.spatialFilterEnabled = true;
@@ -518,12 +542,12 @@ export default {
         }
 
         // Pause: let the user choose columns, page size, etc.
-        this.setStatus('Ready — configure query settings.');
+        this.statusMessage = '';
         this.loading = false;
         this.querySettingsOpen = true;
       } catch (e) {
         console.error('Load error:', e);
-        this.setStatus(`Error: ${e.message}`, true);
+        this.setError(e);
         this.loading = false;
       }
     },
@@ -547,12 +571,12 @@ export default {
       try {
         this.setStatus('Loading data...');
         await this.executeQuery(0);
-        this.setStatus(
+        this.notify(
           `Loaded ${this.loadedCount.toLocaleString()} of ${this.totalRows.toLocaleString()} rows.`
         );
       } catch (e) {
         console.error('Query error:', e);
-        this.setStatus(`Error: ${e.message}`, true);
+        this.setError(e);
       } finally {
         this.loading = false;
       }
@@ -568,9 +592,9 @@ export default {
       try {
         this.setStatus('Loading more data...');
         await this.executeQuery(this.currentOffset);
-        this.setStatus(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
+        this.notify(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
       } catch (e) {
-        this.setStatus(`Error loading more: ${e.message}`, true);
+        this.setError(e);
       } finally {
         this.loading = false;
       }
@@ -590,9 +614,9 @@ export default {
       try {
         this.setStatus('Loading all remaining data...');
         await this.executeQuery(this.currentOffset, null);
-        this.setStatus(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
+        this.notify(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
       } catch (e) {
-        this.setStatus(`Error: ${e.message}`, true);
+        this.setError(e);
       } finally {
         this.loading = false;
       }
@@ -621,11 +645,12 @@ export default {
         this.setStatus('Loading filtered data...');
         await this.executeQuery(0);
 
-        this.setStatus(
-          `Filter matched ${this.filteredCount.toLocaleString()} rows. Showing ${this.loadedCount.toLocaleString()}.`
+        this.notify(
+          `Filter matched ${this.filteredCount.toLocaleString()} rows.`,
+          `Showing ${this.loadedCount.toLocaleString()}.`
         );
       } catch (e) {
-        this.setStatus(`Filter error: ${e.message}`, true);
+        this.setError(e);
       } finally {
         this.loading = false;
       }
@@ -768,10 +793,10 @@ export default {
 
         if (gen !== this.viewportGeneration) return;
 
-        this.setStatus(`Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`);
+        this.notify(`Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`);
       } catch (e) {
         if (gen === this.viewportGeneration) {
-          this.setStatus(`Error: ${e.message}`, true);
+          this.setError(e);
         }
       } finally {
         this.loading = false;
@@ -782,6 +807,14 @@ export default {
 </script>
 
 <style>
+/* Snotify toast sizing */
+.snotifyToast__title {
+  font-size: 1.3em;
+}
+.snotifyToast__body {
+  font-size: 0.85em;
+}
+
 /* Remove padding from v-main to use full space */
 :deep(.v-main) {
   padding: 0 !important;
