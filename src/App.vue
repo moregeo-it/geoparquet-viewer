@@ -309,6 +309,21 @@ export default {
       const colMeta = this.geoMetadata.columns[this.primaryGeoColumn];
       return !!(colMeta?.covering?.bbox);
     },
+    /**
+     * Known geometry type for the primary column (e.g. 'point', 'polygon').
+     * Derived from GeoParquet geometry_types. Returned only when all entries
+     * resolve to a single base type (stripping Z/M/ZM). Passed to
+     * buildGeoArrowTables to skip per-WKB type classification.
+     */
+    knownGeomType() {
+      const col = this.primaryGeoColumn;
+      const types = this.geoMetadata?.columns?.[col]?.geometry_types;
+      if (!types || types.length === 0) return null;
+      const baseTypes = new Set(
+        types.map((t) => t.split(' ')[0].toLowerCase())
+      );
+      return baseTypes.size === 1 ? baseTypes.values().next().value : null;
+    },
     /** All geometry column names */
     geoColumns() {
       if (this.geoMetadata?.columns) return Object.keys(this.geoMetadata.columns);
@@ -554,30 +569,41 @@ export default {
         offset
       });
 
-      const arrowRows = result.toArray();
-      const fieldNames = result.schema.fields.map((f) => f.name);
+      const numRows = result.numRows;
+
+      // ── Column-oriented extraction ─────────────────────
+      // Get Arrow Vectors once — avoids per-row StructRow Proxy overhead.
+      const geoColSet = new Set(this.geoColumns);
+      const displayCols = [];
+      for (const field of result.schema.fields) {
+        if (field.name === '__wkb' || geoColSet.has(field.name)) continue;
+        displayCols.push({ name: field.name, vector: result.getChild(field.name) });
+      }
+
+      // WKB vector: __wkb when spatial extension produced it, else raw geo column.
+      const wkbFromSpatial = result.getChild('__wkb');
+      const wkbVector = wkbFromSpatial ?? (geoCol ? result.getChild(geoCol) : null);
 
       const newRows = [];
       const mapWkbArrays = [];
       const newWkbByIndex = {};
       const mapIndices = [];
 
-      for (let i = 0; i < arrowRows.length; i++) {
-        const arrowRow = arrowRows[i];
+      for (let i = 0; i < numRows; i++) {
         const globalIndex = offset + i;
 
         // ── Build table row ────────────────────────────────
         const row = { __index: globalIndex };
-        for (const name of fieldNames) {
-          if (name === '__wkb') continue;
-          if (this.geoColumns.includes(name)) continue;
-          row[name] = normalizeDisplayValue(arrowRow[name]);
+        for (let c = 0; c < displayCols.length; c++) {
+          row[displayCols[c].name] = normalizeDisplayValue(displayCols[c].vector.get(i));
         }
         newRows.push(row);
 
         // ── Collect map-ready WKB + attributes ──────────────
-        if (geoCol) {
-          const wkb = toBinary(arrowRow.__wkb ?? arrowRow[geoCol]);
+        if (wkbVector) {
+          // Arrow Vector.get() returns Uint8Array for Binary columns (__wkb).
+          // For raw geo column (no spatial ext), toBinary() normalises the BLOB.
+          const wkb = wkbFromSpatial ? wkbVector.get(i) : toBinary(wkbVector.get(i));
           if (wkb) {
             newWkbByIndex[globalIndex] = wkb;
             mapWkbArrays.push(wkb);
@@ -586,20 +612,22 @@ export default {
         }
       }
 
-      this.rows = [...this.rows, ...newRows];
+      this.rows.push(...newRows);
 
       if (mapWkbArrays.length > 0) {
         const attributes = new Map([
           ['__index', { values: mapIndices, type: 'BIGINT' }]
         ]);
-        const geoArrowResults = buildGeoArrowTables(mapWkbArrays, attributes);
+        const geoArrowResults = buildGeoArrowTables(
+          mapWkbArrays, attributes, this.knownGeomType
+        );
 
         this.geoArrowResults = [...this.geoArrowResults, ...geoArrowResults];
         Object.assign(this.wkbByIndex, newWkbByIndex);
       }
 
-      this.currentOffset = offset + arrowRows.length;
-      this.lastPageFull = limit ? arrowRows.length >= limit : false;
+      this.currentOffset = offset + numRows;
+      this.lastPageFull = limit ? numRows >= limit : false;
 
       // Set map bounds on first load (skip if already set, e.g. viewport reload)
       if (offset === 0 && !this.mapBounds && this.geoArrowResults.length > 0) {
