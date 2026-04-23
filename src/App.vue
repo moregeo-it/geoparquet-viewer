@@ -40,7 +40,7 @@
             flat
           >
             <v-toolbar-title class="text-caption">
-              <code>{{ displaySource }}</code>
+              {{ displaySource }}
             </v-toolbar-title>
             <v-spacer />
             <span v-if="!initialLoading && statusMessage" class="text-caption mr-3" :class="isError ? 'text-error' : 'text-grey-lighten-2'">
