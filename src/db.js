@@ -236,7 +236,7 @@ export async function getRowCount(source) {
 export async function bootstrapMetadata(source, onProgress = () => {}) {
   const escaped = escapeSource(source);
 
-  // 1. Schema (also populates geometry type cache)
+  // 1. Schema — also populates geometry type cache for queryData/queryCount
   onProgress('Reading schema...');
   const schemaResult = await query(`DESCRIBE SELECT * FROM read_parquet('${escaped}')`);
   const schema = schemaResult.toArray().map((row) => ({
@@ -246,8 +246,8 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   }));
   cacheSchemaGeomTypes(source, schema);
 
-  // 2. Row count + row group size from parquet_metadata (single query, footer already cached)
-  onProgress('Reading parquet metadata...');
+  // 2. Row count + row group size (footer now cached from step 1)
+  onProgress('Reading parquet stats...');
   let totalRows = -1;
   let rowGroupSize = null;
   try {
@@ -269,7 +269,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     } catch { /* leave as -1 */ }
   }
 
-  // 3. KV metadata + geo metadata (parquet_kv_metadata — footer already cached)
+  // 3. KV metadata (includes GeoParquet 'geo' key)
   onProgress('Reading KV metadata...');
   let kvMetadata = null;
   let geoMetadata = null;
@@ -289,7 +289,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     console.warn('Could not read KV metadata:', e.message);
   }
 
-  // 4. File metadata (parquet_schema — lightweight, footer cached)
+  // 4. File-level schema metadata (parquet_schema)
   let fileMetadata = null;
   try {
     const fileResult = await query(`SELECT * FROM parquet_schema('${escaped}')`);
@@ -316,64 +316,6 @@ function blobToString(val) {
   if (ArrayBuffer.isView(val)) return new TextDecoder().decode(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
   if (val instanceof ArrayBuffer) return new TextDecoder().decode(val);
   return String(val);
-}
-
-/**
- * Get Parquet key-value metadata.
- * Returns an object with string keys and parsed (JSON or string) values.
- */
-export async function getKVMetadata(source) {
-  const escaped = escapeSource(source);
-  const result = await query(
-    `SELECT key, value FROM parquet_kv_metadata('${escaped}')`
-  );
-  const metadata = {};
-  for (const row of result.toArray()) {
-    const key = blobToString(row.key);
-    let value = blobToString(row.value);
-    try {
-      value = JSON.parse(value);
-    } catch {
-      /* keep as string */
-    }
-    metadata[key] = value;
-  }
-  return metadata;
-}
-
-/**
- * Get Parquet file-level metadata (schema info).
- */
-export async function getParquetFileMetadata(source) {
-  const escaped = escapeSource(source);
-  const result = await query(
-    `SELECT * FROM parquet_schema('${escaped}')`
-  );
-  return result.toArray().map((row) => {
-    const obj = {};
-    for (const field of result.schema.fields) {
-      const v = row[field.name];
-      obj[field.name] = typeof v === 'bigint' ? Number(v) : v;
-    }
-    return obj;
-  });
-}
-
-/**
- * Get the first row group's row count from a Parquet file.
- * Uses a minimal query — fetches a single scalar value.
- * @param {string} source - Parquet source path.
- * @returns {Promise<number|null>} Row count of the first row group, or null if unavailable.
- */
-export async function getRowGroupSize(source) {
-  const escaped = escapeSource(source);
-  const result = await query(
-    `SELECT row_group_num_rows FROM parquet_metadata('${escaped}') LIMIT 1`
-  );
-  const rows = result.toArray();
-  if (rows.length === 0) return null;
-  const size = Number(rows[0].row_group_num_rows);
-  return size > 0 ? size : null;
 }
 
 /**
