@@ -189,7 +189,7 @@ import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 
 const MIN_PAGE_SIZE = 1000;
-const DEFAULT_PAGE_SIZE = 100000;
+const DEFAULT_PAGE_SIZE = 10000;
 
 function normalizeDisplayValue(value) {
   if (value === null || value === undefined) return value;
@@ -354,6 +354,16 @@ export default {
       this.loadDialogOpen = true;
     }
   },
+  watch: {
+    loading(newVal, oldVal) {
+      if (oldVal && !newVal && this.statusMessage && !this.isError) {
+        if (this._statusTimer) clearTimeout(this._statusTimer);
+        this._statusTimer = setTimeout(() => {
+          if (!this.loading) this.statusMessage = '';
+        }, 3000);
+      }
+    },
+  },
   methods: {
     // ── Dialog helpers ─────────────────────────────────────
     openMetadataDialog(title, data) {
@@ -366,11 +376,7 @@ export default {
     setStatus(msg, error = false) {
       this.statusMessage = msg;
       this.isError = error;
-      if (!error && msg) {
-        setTimeout(() => {
-          if (this.statusMessage === msg) this.statusMessage = '';
-        }, 5000);
-      }
+      if (this._statusTimer) clearTimeout(this._statusTimer);
     },
 
     // ── Data loading ──────────────────────────────────────
