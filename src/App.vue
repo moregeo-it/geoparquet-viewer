@@ -36,7 +36,7 @@
         <div v-if="source" class="source-toolbar-wrapper flex-grow-0">
           <v-toolbar
             density="compact"
-            color="grey-darken-1"
+            color="surface"
             flat
           >
             <v-toolbar-title class="text-caption">
@@ -54,13 +54,6 @@
               mdi-cog
             </v-icon>
           </v-toolbar>
-          <v-progress-linear
-            v-if="loading && !initialLoading"
-            indeterminate
-            color="primary"
-            height="7"
-            class="toolbar-progress"
-          />
         </div>
 
         <vue-snotify />
@@ -82,8 +75,8 @@
             />
             <div
               v-if="hasMore"
-              class="d-flex justify-center ga-2 pa-1 bg-grey-lighten-4"
-              style="border-top: 1px solid #ddd"
+              class="d-flex justify-center ga-2 pa-1"
+              style="border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity))"
             >
               <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
                 Load more ({{ pageSize.toLocaleString() }} rows)
@@ -201,7 +194,6 @@ import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
 
-const MIN_PAGE_SIZE = 1000;
 const DEFAULT_PAGE_SIZE = 10000;
 
 function normalizeDisplayValue(value) {
@@ -257,6 +249,7 @@ export default {
 
       // Pagination
       pageSize: DEFAULT_PAGE_SIZE,
+      rowGroupSize: null,
       currentOffset: 0,
       lastPageFull: false,
 
@@ -380,6 +373,7 @@ export default {
       return {
         selectedColumns: this.selectedColumns,
         pageSize: this.pageSize,
+        rowGroupSize: this.rowGroupSize,
         spatialFilterEnabled: this.spatialFilterEnabled,
         geometryType,
         crsLabel
@@ -537,9 +531,7 @@ export default {
         this.kvMetadata = meta.kvMetadata;
         this.geoMetadata = meta.geoMetadata;
         this.fileMetadata = meta.fileMetadata;
-        if (meta.rowGroupSize !== null) {
-          this.pageSize = Math.max(MIN_PAGE_SIZE, Math.min(meta.rowGroupSize, DEFAULT_PAGE_SIZE));
-        }
+        this.rowGroupSize = meta.rowGroupSize;
 
         // Pause: let the user choose columns, page size, etc.
         this.statusMessage = '';
@@ -839,7 +831,7 @@ export default {
 .left-panel {
   width: 50%;
   min-width: 300px;
-  border-right: 2px solid #ccc;
+  border-right: 2px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -869,7 +861,7 @@ export default {
     width: 100% !important;
     height: 50%;
     border-right: none !important;
-    border-bottom: 2px solid #ccc;
+    border-bottom: 2px solid rgba(var(--v-border-color), var(--v-border-opacity));
     display: flex;
     flex-direction: column;
     overflow: hidden;

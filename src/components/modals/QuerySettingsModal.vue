@@ -29,10 +29,6 @@
         <p class="text-caption text-grey-darken-1 mb-2">
           Select which columns to load and display in the table.
         </p>
-        <div class="d-flex ga-2 mb-2">
-          <v-btn size="medium" variant="text" v-if="localSelectedColumns.length < availableColumns.length" @click="selectAllColumns">Select all</v-btn>
-          <v-btn size="medium" variant="text" v-if="localSelectedColumns.length > 0" @click="deselectAllColumns">Deselect all</v-btn>
-        </div>
         <div class="column-picker-list" :class="{ 'column-picker-list--tall': availableColumns.length > 10 }">
           <label
             v-for="col in availableColumns"
@@ -50,6 +46,10 @@
             <span class="text-caption text-grey ml-1">{{ col.type }}</span>
           </label>
         </div>
+        <div class="d-flex ga-2 mt-2">
+          <v-btn size="medium" variant="text" v-if="localSelectedColumns.length < availableColumns.length" @click="selectAllColumns">Select all</v-btn>
+          <v-btn size="medium" variant="text" v-if="localSelectedColumns.length > 0" @click="deselectAllColumns">Deselect all</v-btn>
+        </div>
 
         <v-divider class="my-4" />
 
@@ -61,10 +61,12 @@
         <v-select
           v-model="localPageSize"
           :items="pageSizeOptions"
+          item-title="title"
+          item-value="value"
           density="compact"
           variant="outlined"
           hide-details
-          style="max-width: 200px"
+          style="max-width: 280px"
         />
 
         <!-- Spatial filtering toggle -->
@@ -118,14 +120,7 @@ export default {
     return {
       localSelectedColumns: [],
       localPageSize: 10000,
-      localSpatialFilter: true,
-      pageSizeOptions: [
-        { title: '1,000', value: 1000 },
-        { title: '5,000', value: 5000 },
-        { title: '10,000', value: 10000 },
-        { title: '25,000', value: 25000 },
-        { title: '50,000', value: 50000 }
-      ]
+      localSpatialFilter: true
     };
   },
   computed: {
@@ -143,6 +138,38 @@ export default {
     /** CRS label */
     crsLabel() {
       return this.defaults.crsLabel || null;
+    },
+    /** Build page size options dynamically based on rowGroupSize */
+    pageSizeOptions() {
+      const rgs = this.defaults.rowGroupSize;
+
+      // Base options with descriptions for larger values
+      const baseOptions = [
+        { value: 1000, title: '1,000', props: {} },
+        { value: 5000, title: '5,000', props: {} },
+        { value: 10000, title: '10,000 — default', props: {} },
+        { value: 25000, title: '25,000 — may be slow', props: {} },
+        { value: 50000, title: '50,000 — not recommended', props: {} }
+      ];
+
+      // If we have a rowGroupSize and it's >= 1000, add or replace in the list
+      if (rgs && rgs >= 1000) {
+        const existing = baseOptions.find((o) => o.value === rgs);
+        if (existing) {
+          // Row group size matches an existing option — annotate it
+          existing.title = `${rgs.toLocaleString()} — row group size`;
+        } else {
+          // Insert row group size as a new option in sorted position
+          baseOptions.push({
+            value: rgs,
+            title: `${rgs.toLocaleString()} — row group size`,
+            props: {}
+          });
+          baseOptions.sort((a, b) => a.value - b.value);
+        }
+      }
+
+      return baseOptions;
     }
   },
   watch: {
@@ -154,19 +181,17 @@ export default {
     initFromDefaults() {
       const d = this.defaults;
       const allNames = this.availableColumns.map((c) => c.name);
-      this.localSelectedColumns = d.selectedColumns
-        ? d.selectedColumns.filter((n) => allNames.includes(n))
-        : [...allNames];
+
+      // On first open (no previous selection), deselect all.
+      // On re-open (user already picked columns), restore their selection.
+      if (d.selectedColumns) {
+        this.localSelectedColumns = d.selectedColumns.filter((n) => allNames.includes(n));
+      } else {
+        this.localSelectedColumns = [];
+      }
+
       this.localPageSize = d.pageSize || 10000;
       this.localSpatialFilter = d.spatialFilterEnabled !== false;
-
-      // Ensure the default page size is in the options list
-      if (!this.pageSizeOptions.some((o) => o.value === this.localPageSize)) {
-        this.pageSizeOptions = [
-          ...this.pageSizeOptions,
-          { title: this.localPageSize.toLocaleString(), value: this.localPageSize }
-        ].sort((a, b) => a.value - b.value);
-      }
     },
     selectAllColumns() {
       this.localSelectedColumns = this.availableColumns.map((c) => c.name);
@@ -197,7 +222,7 @@ export default {
 
 <style scoped>
 .column-picker-list {
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 4px;
   max-height: 200px;
   overflow-y: auto;
@@ -206,7 +231,7 @@ export default {
   max-height: 300px;
 }
 .column-picker-item:hover {
-  background: #f5f5f5;
+  background: rgba(var(--v-theme-on-surface), 0.08);
 }
 .column-picker-item .v-selection-control {
   min-height: unset;

@@ -25,7 +25,7 @@
           <th
             v-for="col in cols"
             :key="col.key"
-            class="text-caption bg-grey-lighten-3"
+            class="text-caption table-header"
             :style="col.key === '__index' ? 'width: 60px; text-align: center' : ''"
           >
             <div class="font-weight-bold">{{ col.title }}</div>
@@ -114,5 +114,9 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 0.78rem;
+}
+.table-header {
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 </style>
