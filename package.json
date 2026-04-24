@@ -19,7 +19,7 @@
     "@theace0296/vue-snotify": "^4.0.4",
     "@walkthru-earth/objex-utils": "^1.1.0",
     "apache-arrow": "^21.1.0",
-    "maplibre-gl": "^5.23.0",
+    "maplibre-gl": "^5.24.0",
     "vue": "^3.5.22",
     "vuetify": "^4.0.6",
     "yaml": "^2.8.3"
@@ -30,10 +30,10 @@
     "@vue/eslint-config-prettier": "^10.2.0",
     "eslint": "^10.2.1",
     "eslint-plugin-vue": "^10.9.0",
-    "globals": "^16.3.0",
+    "globals": "^17.5.0",
     "prettier": "^3.8.3",
     "sass": "^1.77.0",
-    "vite": "^8.0.9",
+    "vite": "^8.0.10",
     "vite-plugin-vuetify": "^2.1.3"
   }
 }

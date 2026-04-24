@@ -61,7 +61,7 @@ export default {
   computed: {
     tableHeaders() {
       return [
-        { title: '#', key: '__index', width: 60, sortable: false, align: 'center' },
+        { title: '', key: '__index', width: 60, sortable: false, align: 'center' },
         ...this.columns.map((col) => ({
           title: col.name,
           subtitle: col.type,
