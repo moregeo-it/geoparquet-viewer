@@ -23,7 +23,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(var(--v-theme-surface), 0.8);
   z-index: 10;
 }
 .loading-content {

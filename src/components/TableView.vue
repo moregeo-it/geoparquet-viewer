@@ -1,7 +1,7 @@
 <template>
   <div class="table-wrapper">
     <div
-      v-if="columns.length === 0"
+      v-if="columns.length === 0 && !loading"
       class="d-flex align-center justify-center fill-height text-grey"
     >
       No columns to display
@@ -16,6 +16,7 @@
       density="compact"
       fixed-header
       hover
+      :loading="loading && columns.length !== 0"
       no-data-text="No data loaded"
       :row-props="rowProps"
       @click:row="onRowClick"
@@ -53,7 +54,8 @@ export default {
   props: {
     rows: { type: Array, default: () => [] },
     columns: { type: Array, default: () => [] },
-    selectedIndex: { type: Number, default: null }
+    selectedIndex: { type: Number, default: null },
+    loading: { type: Boolean, default: false }
   },
   emits: ['select'],
   computed: {

@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <v-app-bar color="grey-darken-3" density="compact" flat>
+    <v-app-bar color="surface" density="compact" flat elevation="1">
       <v-app-bar-title class="text-body-1 font-weight-bold flex-grow-0 mr-4">
         GeoParquet Viewer
       </v-app-bar-title>
@@ -71,6 +71,7 @@
               :rows="rows"
               :columns="visibleColumns"
               :selectedIndex="selectedIndex"
+              :loading="loading"
               @select="onTableSelect"
             />
             <div
@@ -405,9 +406,6 @@ export default {
       return Math.max(0, total - this.loadedCount);
     }
   },
-  created() {
-    this._progressToastId = null;
-  },
   mounted() {
     const url = getDefaultUrl();
     if (url) {
@@ -428,37 +426,38 @@ export default {
     // ── Status & notifications ─────────────────────────────
     setStatus(msg) {
       this.statusMessage = msg;
-      if (!this.initialLoading) {
-        this._dismissProgress();
-        this._progressToastId = this.$snotify.info(msg, { timeout: 0, closeOnClick: false })?.id ?? null;
-      }
-    },
-
-    notify(title, detail = '', type = 'success') {
-      this.statusMessage = '';
-      this._dismissProgress();
-      const body = [detail].filter(Boolean).join('\n');
-      this.$snotify[type]?.(body, title) ?? this.$snotify.success(body, title);
     },
 
     setError(err) {
       this.statusMessage = '';
-      this._dismissProgress();
       const info = friendlyError(err);
       const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
-      this.$snotify.error(
-        body,
-        info.title,
-        { timeout: 0, closeOnClick: true }
-      );
+      this.$snotify.error(body, info.title, { timeout: 0, closeOnClick: true });
     },
 
-
-    _dismissProgress() {
-      if (this._progressToastId != null) {
-        this.$snotify.remove(this._progressToastId, true);
-        this._progressToastId = null;
-      }
+    /**
+     * Run an async task with snotify async toast.
+     * Shows spinner while pending, transitions to success/error automatically.
+     */
+    _runTask(message, work) {
+      this.loading = true;
+      this.$snotify.async(message, () =>
+        work()
+          .then(successMsg => {
+            this.loading = false;
+            return { body: successMsg, config: { timeout: 4000 } };
+          })
+          .catch(err => {
+            this.loading = false;
+            console.error(err);
+            const info = friendlyError(err);
+            throw {
+              title: info.title,
+              body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
+              config: { timeout: 0, closeOnClick: true }
+            };
+          })
+      );
     },
 
     // ── Data loading ──────────────────────────────────────
@@ -512,7 +511,6 @@ export default {
       this.currentOffset = 0;
       this.statusMessage = '';
       this.$snotify.clear();
-      this._progressToastId = null;
       this.viewportStale = false;
       this.selectedColumns = null;
       this.spatialFilterEnabled = true;
@@ -544,7 +542,7 @@ export default {
       }
     },
 
-    async applyQuerySettings(settings) {
+    applyQuerySettings(settings) {
       this.selectedColumns = settings.selectedColumns;
       this.pageSize = settings.pageSize;
       this.spatialFilterEnabled = settings.spatialFilterEnabled;
@@ -559,37 +557,22 @@ export default {
       this.filteredCount = null;
       this.filters = [];
 
-      this.loading = true;
-      try {
-        this.setStatus('Loading data...');
+      this._runTask('Loading data...', async () => {
         await this.executeQuery(0);
-        this.notify(
-          `Loaded ${this.loadedCount.toLocaleString()} of ${this.totalRows.toLocaleString()} rows.`
-        );
-      } catch (e) {
-        console.error('Query error:', e);
-        this.setError(e);
-      } finally {
-        this.loading = false;
-      }
+        return `Loaded ${this.loadedCount.toLocaleString()} of ${this.totalRows.toLocaleString()} rows.`;
+      });
     },
 
     reopenQuerySettings() {
       this.querySettingsOpen = true;
     },
 
-    async loadMore() {
+    loadMore() {
       if (!this.hasMore || this.loading) return;
-      this.loading = true;
-      try {
-        this.setStatus('Loading more data...');
+      this._runTask('Loading more data...', async () => {
         await this.executeQuery(this.currentOffset);
-        this.notify(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
-      } catch (e) {
-        this.setError(e);
-      } finally {
-        this.loading = false;
-      }
+        return `Loaded ${this.loadedCount.toLocaleString()} rows.`;
+      });
     },
 
     confirmLoadAllIfLarge() {
@@ -600,32 +583,24 @@ export default {
       }
     },
 
-    async loadAll() {
+    loadAll() {
       if (!this.hasMore || this.loading) return;
-      this.loading = true;
-      try {
-        this.setStatus('Loading all remaining data...');
+      this._runTask('Loading all remaining data...', async () => {
         await this.executeQuery(this.currentOffset, null);
-        this.notify(`Loaded ${this.loadedCount.toLocaleString()} rows.`);
-      } catch (e) {
-        this.setError(e);
-      } finally {
-        this.loading = false;
-      }
+        return `Loaded ${this.loadedCount.toLocaleString()} rows.`;
+      });
     },
 
-    async applyFilters(newFilters) {
+    applyFilters(newFilters) {
       this.filters = newFilters;
-      this.loading = true;
-      try {
-        this.rows = [];
-        this.geoArrowResults = [];
-        this.wkbByIndex = {};
-        this.mapBounds = null;
-        this.currentOffset = 0;
-        this.selectedIndex = null;
+      this.rows = [];
+      this.geoArrowResults = [];
+      this.wkbByIndex = {};
+      this.mapBounds = null;
+      this.currentOffset = 0;
+      this.selectedIndex = null;
 
-        this.setStatus('Counting filtered rows...');
+      this._runTask('Applying filters...', async () => {
         this.filteredCount = await queryCount(
           this.source,
           this.filters,
@@ -633,19 +608,9 @@ export default {
           this.primaryGeoColumn,
           this.sourceCrsString
         );
-
-        this.setStatus('Loading filtered data...');
         await this.executeQuery(0);
-
-        this.notify(
-          `Filter matched ${this.filteredCount.toLocaleString()} rows.`,
-          `Showing ${this.loadedCount.toLocaleString()}.`
-        );
-      } catch (e) {
-        this.setError(e);
-      } finally {
-        this.loading = false;
-      }
+        return `Filter matched ${this.filteredCount.toLocaleString()} rows. Showing ${this.loadedCount.toLocaleString()}.`;
+      });
     },
 
     /**
@@ -768,31 +733,21 @@ export default {
       }
     },
 
-    async reloadForViewport() {
+    reloadForViewport() {
       this.viewportStale = false;
       const gen = ++this.viewportGeneration;
-      this.loading = true;
-      try {
-        this.rows = [];
-        this.geoArrowResults = [];
-        this.wkbByIndex = {};
-        // Keep mapBounds — the map is already at the right viewport.
-        this.currentOffset = 0;
-        this.selectedIndex = null;
+      this.rows = [];
+      this.geoArrowResults = [];
+      this.wkbByIndex = {};
+      // Keep mapBounds — the map is already at the right viewport.
+      this.currentOffset = 0;
+      this.selectedIndex = null;
 
-        this.setStatus('Loading data in viewport...');
+      this._runTask('Loading data in viewport...', async () => {
         await this.executeQuery(0);
-
-        if (gen !== this.viewportGeneration) return;
-
-        this.notify(`Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`);
-      } catch (e) {
-        if (gen === this.viewportGeneration) {
-          this.setError(e);
-        }
-      } finally {
-        this.loading = false;
-      }
+        if (gen !== this.viewportGeneration) return '';
+        return `Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`;
+      });
     }
   }
 };

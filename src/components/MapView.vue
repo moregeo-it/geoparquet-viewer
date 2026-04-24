@@ -339,8 +339,8 @@ export default {
   transform: translateX(-50%);
   z-index: 2;
   padding: 6px 16px;
-  background: #1976d2;
-  color: #fff;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
   border: none;
   border-radius: 4px;
   font-size: 13px;
@@ -350,7 +350,7 @@ export default {
 }
 
 .reload-viewport-btn:hover {
-  background: #1565c0;
+  background: rgb(var(--v-theme-primary));
 }
 
 .reload-viewport-btn:disabled {
