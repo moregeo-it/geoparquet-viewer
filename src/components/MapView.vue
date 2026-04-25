@@ -130,12 +130,7 @@ export default {
     emitViewport() {
       if (!this.map) return;
       const b = this.map.getBounds();
-      this.$emit('viewportChange', [
-        b.getWest(),
-        b.getSouth(),
-        b.getEast(),
-        b.getNorth()
-      ]);
+      this.$emit('viewportChange', [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
     },
 
     updateLayers() {
@@ -159,7 +154,8 @@ export default {
           const indexCol = result.table.getChild('__index');
           const indexValues = indexCol ? indexCol.toArray() : null;
           const isSelected = (objectInfo) =>
-            selectedIndex !== null && indexValues !== null &&
+            selectedIndex !== null &&
+            indexValues !== null &&
             indexValues[objectInfo.index] === selectedIndex;
 
           if (result.geometryType === 'point' || result.geometryType === 'multipoint') {
@@ -188,13 +184,15 @@ export default {
                 }
               })
             );
-          } else if (result.geometryType === 'linestring' || result.geometryType === 'multilinestring') {
+          } else if (
+            result.geometryType === 'linestring' ||
+            result.geometryType === 'multilinestring'
+          ) {
             layers.push(
               new GeoArrowPathLayer({
                 id: layerId,
                 data: result.table,
-                getColor: (objectInfo) =>
-                  isSelected(objectInfo) ? SELECTED_LINE : NORMAL_LINE,
+                getColor: (objectInfo) => (isSelected(objectInfo) ? SELECTED_LINE : NORMAL_LINE),
                 getWidth: 2.5,
                 widthUnits: 'pixels',
                 widthMinPixels: 1.5,
@@ -257,7 +255,10 @@ export default {
       if (!isFinite(w) || !isFinite(s) || !isFinite(e) || !isFinite(n)) return;
       // Sanity-check that coordinates are in valid WGS84 range.
       if (Math.abs(w) > 180 || Math.abs(e) > 180 || Math.abs(s) > 90 || Math.abs(n) > 90) {
-        console.warn('MapView: bounds appear to be in non-WGS84 CRS — skipping fitBounds', this.bounds);
+        console.warn(
+          'MapView: bounds appear to be in non-WGS84 CRS — skipping fitBounds',
+          this.bounds
+        );
         return;
       }
       try {
@@ -280,7 +281,10 @@ export default {
         if (!wkb) return;
         const geometry = parseWKB(wkb);
         if (!geometry?.coordinates) return;
-        let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+        let west = Infinity,
+          south = Infinity,
+          east = -Infinity,
+          north = -Infinity;
         const visit = (c) => {
           if (typeof c[0] === 'number' && typeof c[1] === 'number') {
             if (c[0] < west) west = c[0];

@@ -97,7 +97,7 @@ export default {
       if (this.$refs.table?.scrollToIndex) {
         this.$refs.table.scrollToIndex(rowPosition);
       }
-    },
+    }
   }
 };
 </script>

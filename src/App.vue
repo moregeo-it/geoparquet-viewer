@@ -34,11 +34,7 @@
     <v-main>
       <div class="d-flex flex-column fill-height">
         <div v-if="source" class="source-toolbar-wrapper flex-grow-0">
-          <v-toolbar
-            density="compact"
-            color="surface"
-            flat
-          >
+          <v-toolbar density="compact" color="surface" flat>
             <v-toolbar-title class="text-caption">
               {{ displaySource }}
             </v-toolbar-title>
@@ -50,7 +46,13 @@
               {{ loadedCount.toLocaleString() }} loaded /
               {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
             </span>
-            <v-icon v-if="schema" size="small" variant="text" class="mr-3" @click="reopenQuerySettings">
+            <v-icon
+              v-if="schema"
+              size="small"
+              variant="text"
+              class="mr-3"
+              @click="reopenQuerySettings"
+            >
               mdi-cog
             </v-icon>
           </v-toolbar>
@@ -58,7 +60,11 @@
 
         <vue-snotify />
 
-        <div v-if="source" class="content-panels d-flex flex-grow-1" style="min-height: 0; position: relative">
+        <div
+          v-if="source"
+          class="content-panels d-flex flex-grow-1"
+          style="min-height: 0; position: relative"
+        >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
           <div class="left-panel d-flex flex-column">
             <FilterPanel
@@ -115,8 +121,8 @@
         >
           <h2 class="text-h5 mb-2">GeoParquet Viewer</h2>
           <p class="text-body-2 text-grey-darken-1 mb-1" style="max-width: 500px">
-            Load a <a href="https://geoparquet.org" target="_blank">GeoParquet</a> file to
-            visualize it on a map and explore the data in a table.
+            Load a <a href="https://geoparquet.org" target="_blank">GeoParquet</a> file to visualize
+            it on a map and explore the data in a table.
           </p>
           <p class="text-body-2 text-grey-darken-1" style="max-width: 500px">
             Supports local files and remote URLs with HTTP range requests.
@@ -134,11 +140,7 @@
       @save="loadFromUrl"
       @load-file="loadFromFile"
     />
-    <SchemaModal
-      v-model="schemaDialogOpen"
-      :schema="schema || []"
-      :geo-metadata="geoMetadata"
-    />
+    <SchemaModal v-model="schemaDialogOpen" :schema="schema || []" :geo-metadata="geoMetadata" />
     <MetadataModal
       v-model="metadataDialogOpen"
       :title="metadataDialogTitle"
@@ -159,13 +161,21 @@
       <v-card>
         <v-card-title class="text-h6">Loading all remaining data?</v-card-title>
         <v-card-text class="text-body-2">
-          There are <strong>{{ remainingRows.toLocaleString() }}</strong> rows left to load.
-          This may take a while and could use significant memory.
+          There are <strong>{{ remainingRows.toLocaleString() }}</strong> rows left to load. This
+          may take a while and could use significant memory.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="confirmLoadAllOpen = false">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" @click="confirmLoadAllOpen = false; loadAll()">Load All</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            @click="
+              confirmLoadAllOpen = false;
+              loadAll();
+            "
+            >Load All</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -181,7 +191,12 @@ import {
   queryData,
   queryCount
 } from './db.js';
-import { buildGeoArrowTables, formatValue, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
+import {
+  buildGeoArrowTables,
+  formatValue,
+  toBinary,
+  findGeoColumn
+} from '@walkthru-earth/objex-utils';
 import { friendlyError } from './utils.js';
 
 import MapView from './components/MapView.vue';
@@ -319,7 +334,7 @@ export default {
     hasBboxCovering() {
       if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return false;
       const colMeta = this.geoMetadata.columns[this.primaryGeoColumn];
-      return !!(colMeta?.covering?.bbox);
+      return !!colMeta?.covering?.bbox;
     },
     /**
      * Known geometry type for the primary column (e.g. 'point', 'polygon').
@@ -331,9 +346,7 @@ export default {
       const col = this.primaryGeoColumn;
       const types = this.geoMetadata?.columns?.[col]?.geometry_types;
       if (!types || types.length === 0) return null;
-      const baseTypes = new Set(
-        types.map((t) => t.split(' ')[0].toLowerCase())
-      );
+      const baseTypes = new Set(types.map((t) => t.split(' ')[0].toLowerCase()));
       return baseTypes.size === 1 ? baseTypes.values().next().value : null;
     },
     /** All geometry column names */
@@ -443,11 +456,11 @@ export default {
       this.loading = true;
       this.$snotify.async(message, () =>
         work()
-          .then(successMsg => {
+          .then((successMsg) => {
             this.loading = false;
             return { body: successMsg, config: { timeout: 4000 } };
           })
-          .catch(err => {
+          .catch((err) => {
             this.loading = false;
             console.error(err);
             const info = friendlyError(err);
@@ -621,9 +634,7 @@ export default {
       // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
       const tableColNames = this.visibleColumns.map((c) => c.name);
       const geoCol = this.primaryGeoColumn;
-      const selectColumns = geoCol
-        ? [...tableColNames, geoCol]
-        : tableColNames;
+      const selectColumns = geoCol ? [...tableColNames, geoCol] : tableColNames;
 
       const result = await queryData(this.source, {
         geoColumn: geoCol,
@@ -681,12 +692,8 @@ export default {
       this.rows.push(...newRows);
 
       if (mapWkbArrays.length > 0) {
-        const attributes = new Map([
-          ['__index', { values: mapIndices, type: 'BIGINT' }]
-        ]);
-        const geoArrowResults = buildGeoArrowTables(
-          mapWkbArrays, attributes, this.knownGeomType
-        );
+        const attributes = new Map([['__index', { values: mapIndices, type: 'BIGINT' }]]);
+        const geoArrowResults = buildGeoArrowTables(mapWkbArrays, attributes, this.knownGeomType);
 
         this.geoArrowResults = [...this.geoArrowResults, ...geoArrowResults];
         Object.assign(this.wkbByIndex, newWkbByIndex);
@@ -700,12 +707,18 @@ export default {
         const geoColMeta = this.geoMetadata?.columns?.[geoCol];
         if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
           const [minx, miny, maxx, maxy] = geoColMeta.bbox;
-          this.mapBounds = [[minx, miny], [maxx, maxy]];
+          this.mapBounds = [
+            [minx, miny],
+            [maxx, maxy]
+          ];
         } else {
           const firstResult = this.geoArrowResults[0];
           if (firstResult) {
             const [minX, minY, maxX, maxY] = firstResult.bounds;
-            this.mapBounds = [[minX, minY], [maxX, maxY]];
+            this.mapBounds = [
+              [minX, minY],
+              [maxX, maxY]
+            ];
           }
         }
       }

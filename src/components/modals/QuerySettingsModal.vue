@@ -29,7 +29,10 @@
         <p class="text-caption text-grey-darken-1 mb-2">
           Select which columns to load and display in the table.
         </p>
-        <div class="column-picker-list" :class="{ 'column-picker-list--tall': availableColumns.length > 10 }">
+        <div
+          class="column-picker-list"
+          :class="{ 'column-picker-list--tall': availableColumns.length > 10 }"
+        >
           <label
             v-for="col in availableColumns"
             :key="col.name"
@@ -47,8 +50,20 @@
           </label>
         </div>
         <div class="d-flex ga-2 mt-2">
-          <v-btn size="medium" variant="text" v-if="localSelectedColumns.length < availableColumns.length" @click="selectAllColumns">Select all</v-btn>
-          <v-btn size="medium" variant="text" v-if="localSelectedColumns.length > 0" @click="deselectAllColumns">Deselect all</v-btn>
+          <v-btn
+            size="medium"
+            variant="text"
+            v-if="localSelectedColumns.length < availableColumns.length"
+            @click="selectAllColumns"
+            >Select all</v-btn
+          >
+          <v-btn
+            size="medium"
+            variant="text"
+            v-if="localSelectedColumns.length > 0"
+            @click="deselectAllColumns"
+            >Deselect all</v-btn
+          >
         </div>
 
         <v-divider class="my-4" />
@@ -127,9 +142,7 @@ export default {
     /** Non-geo, non-internal columns available for selection */
     availableColumns() {
       const geoSet = new Set(this.geoColumns);
-      return this.schema.filter(
-        (col) => !geoSet.has(col.name) && !col.name.startsWith('__')
-      );
+      return this.schema.filter((col) => !geoSet.has(col.name) && !col.name.startsWith('__'));
     },
     /** Geometry type label from GeoParquet metadata */
     geometryType() {

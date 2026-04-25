@@ -19,20 +19,10 @@
 
           <template #[`item.name`]="{ value }">
             <strong>{{ value }}</strong>
-            <v-chip
-              v-if="isPrimaryGeo(value)"
-              size="x-small"
-              color="success"
-              class="ml-2"
-            >
+            <v-chip v-if="isPrimaryGeo(value)" size="x-small" color="success" class="ml-2">
               primary geometry
             </v-chip>
-            <v-chip
-              v-else-if="isGeoColumn(value)"
-              size="x-small"
-              color="grey"
-              class="ml-2"
-            >
+            <v-chip v-else-if="isGeoColumn(value)" size="x-small" color="grey" class="ml-2">
               geometry
             </v-chip>
           </template>
@@ -71,7 +61,9 @@
               </tr>
               <tr v-if="crs">
                 <td class="font-weight-bold" style="white-space: nowrap">CRS</td>
-                <td><code>{{ crsName }}</code></td>
+                <td>
+                  <code>{{ crsName }}</code>
+                </td>
               </tr>
               <tr v-if="bbox">
                 <td class="font-weight-bold" style="white-space: nowrap">Bounding Box</td>

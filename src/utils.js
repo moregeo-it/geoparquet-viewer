@@ -29,13 +29,15 @@ export function friendlyError(err) {
     return {
       title: 'Out of memory',
       detail: 'The browser ran out of memory while processing this file.',
-      suggestion: 'Try loading fewer rows per page in Settings, selecting fewer columns, or filtering by viewport.'
+      suggestion:
+        'Try loading fewer rows per page in Settings, selecting fewer columns, or filtering by viewport.'
     };
   }
   if (/fetch|networkerror|failed to fetch|ERR_CONNECTION/i.test(msg)) {
     return {
       title: 'Network error',
-      detail: 'Could not download the file. The server may be unreachable or the URL may be incorrect.',
+      detail:
+        'Could not download the file. The server may be unreachable or the URL may be incorrect.',
       suggestion: 'Check the URL and your internet connection, then try again.'
     };
   }
@@ -56,8 +58,10 @@ export function friendlyError(err) {
   if (/range request|content-range|HTTP 416/i.test(msg)) {
     return {
       title: 'Range requests not supported',
-      detail: 'The server does not support HTTP range requests, which are required for remote Parquet files.',
-      suggestion: 'Download the file locally, or host it on a server that supports range requests (e.g. S3, GCS).'
+      detail:
+        'The server does not support HTTP range requests, which are required for remote Parquet files.',
+      suggestion:
+        'Download the file locally, or host it on a server that supports range requests (e.g. S3, GCS).'
     };
   }
   if (/HTTP 4\d\d|HTTP 5\d\d|403|404|500/i.test(msg)) {
@@ -71,8 +75,10 @@ export function friendlyError(err) {
   if (/_setThrew|stoi.*no conversion/i.test(msg)) {
     return {
       title: 'Spatial extension error',
-      detail: 'DuckDB\'s spatial extension encountered an internal error, possibly due to an unsupported CRS.',
-      suggestion: 'This is a known DuckDB-WASM limitation. Try a file with WGS 84 (EPSG:4326) coordinates.'
+      detail:
+        "DuckDB's spatial extension encountered an internal error, possibly due to an unsupported CRS.",
+      suggestion:
+        'This is a known DuckDB-WASM limitation. Try a file with WGS 84 (EPSG:4326) coordinates.'
     };
   }
   // Generic fallback

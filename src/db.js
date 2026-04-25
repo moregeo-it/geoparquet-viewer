@@ -207,9 +207,7 @@ export function cacheSchemaGeomTypes(source, schema) {
  * @returns {string} SQL expression.
  */
 function geomExpr(geoColumn, alreadyGeometry) {
-  return alreadyGeometry
-    ? `"${geoColumn}"`
-    : `ST_GeomFromWKB("${geoColumn}")`;
+  return alreadyGeometry ? `"${geoColumn}"` : `ST_GeomFromWKB("${geoColumn}")`;
 }
 
 /**
@@ -217,9 +215,7 @@ function geomExpr(geoColumn, alreadyGeometry) {
  */
 export async function getRowCount(source) {
   const escaped = escapeSource(source);
-  const result = await query(
-    `SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`
-  );
+  const result = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
   return Number(result.toArray()[0].cnt);
 }
 
@@ -266,7 +262,9 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     try {
       const countResult = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
       totalRows = Number(countResult.toArray()[0].cnt);
-    } catch { /* leave as -1 */ }
+    } catch {
+      /* leave as -1 */
+    }
   }
 
   // 3. KV metadata (includes GeoParquet 'geo' key)
@@ -279,7 +277,11 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     for (const row of kvResult.toArray()) {
       const key = blobToString(row.key);
       let value = blobToString(row.value);
-      try { value = JSON.parse(value); } catch { /* keep as string */ }
+      try {
+        value = JSON.parse(value);
+      } catch {
+        /* keep as string */
+      }
       kvMetadata[key] = value;
     }
     if (kvMetadata.geo && typeof kvMetadata.geo === 'object') {
@@ -313,7 +315,8 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
  */
 function blobToString(val) {
   if (val instanceof Uint8Array) return new TextDecoder().decode(val);
-  if (ArrayBuffer.isView(val)) return new TextDecoder().decode(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
+  if (ArrayBuffer.isView(val))
+    return new TextDecoder().decode(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
   if (val instanceof ArrayBuffer) return new TextDecoder().decode(val);
   return String(val);
 }
@@ -335,9 +338,7 @@ export async function queryCount(
     isAlreadyGeom = await isGeometryType(source, geoColumn);
   }
   const where = buildWhereClause(filters, bbox, geoColumn, sourceCrs, isAlreadyGeom ?? false);
-  const result = await query(
-    `SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')${where}`
-  );
+  const result = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')${where}`);
   return Number(result.toArray()[0].cnt);
 }
 
@@ -352,7 +353,16 @@ export async function queryCount(
  */
 export async function queryData(
   source,
-  { geoColumn = null, filters = [], bbox = null, sourceCrs = null, limit = null, offset = 0, alreadyGeometry = null, columns = null } = {}
+  {
+    geoColumn = null,
+    filters = [],
+    bbox = null,
+    sourceCrs = null,
+    limit = null,
+    offset = 0,
+    alreadyGeometry = null,
+    columns = null
+  } = {}
 ) {
   const escaped = escapeSource(source);
 
@@ -404,7 +414,13 @@ export async function queryData(
 /**
  * Build a SQL WHERE clause from user filters + optional viewport bbox.
  */
-function buildWhereClause(filters, bbox = null, geoColumn = null, sourceCrs = null, alreadyGeometry = false) {
+function buildWhereClause(
+  filters,
+  bbox = null,
+  geoColumn = null,
+  sourceCrs = null,
+  alreadyGeometry = false
+) {
   const conditions = [];
 
   if (filters && filters.length > 0) {
