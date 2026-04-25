@@ -9,9 +9,6 @@
 import * as duckdb from '@duckdb/duckdb-wasm';
 
 // Import WASM + worker assets as URLs so Vite copies them into the build output.
-// This eliminates any runtime CDN dependency.
-import duckdb_wasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
-import duckdb_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import duckdb_worker_eh from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 
@@ -19,6 +16,10 @@ let _db = null;
 let _conn = null;
 let _spatialLoaded = false;
 let _initPromise = null;
+
+// Cache: source → { geoColumn → boolean } for isGeometryType results.
+// Avoids repeated DESCRIBE queries on every queryData/queryCount call.
+const _geomTypeCache = new Map();
 
 /**
  * Initialize DuckDB-WASM with required extensions.
@@ -29,18 +30,11 @@ export async function initDB(onProgress = () => {}) {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    // Pick the best bundle directly — bypass selectBundle() which can hang
-    // with self-hosted URLs. All modern browsers support EH; fall back to MVP.
     onProgress('Starting DuckDB...');
-    let mainModule = duckdb_wasm_eh;
-    let mainWorker = duckdb_worker_eh;
-    try {
-      // Quick feature-detect: if EH (exception handling) is supported, use it
-      new WebAssembly.Exception(new WebAssembly.Tag({ parameters: [] }));
-    } catch {
-      mainModule = duckdb_wasm;
-      mainWorker = duckdb_worker;
-    }
+
+    // Always use EH (exception handling) bundle — required for spatial/PROJ operations.
+    const mainModule = duckdb_wasm_eh;
+    const mainWorker = duckdb_worker_eh;
 
     const worker = new Worker(mainWorker);
     const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
@@ -61,7 +55,25 @@ export async function initDB(onProgress = () => {}) {
 
     _conn = await _db.connect();
 
-    // Try to load spatial extension for GeoParquet geometry support
+    // Workaround for DuckDB-WASM PROJ initialization timing issue (#2199):
+    // Load coordinate system data BEFORE loading spatial extension.
+    onProgress('Preloading coordinate systems...');
+    try {
+      await _conn.query(`SELECT * FROM duckdb_coordinate_systems()`);
+    } catch (e) {
+      console.warn('Could not preload coordinate systems:', e.message);
+    }
+
+    onProgress('Loading httpfs extension...');
+    try {
+      await _conn.query(`INSTALL httpfs`);
+      await _conn.query(`LOAD httpfs`);
+      onProgress('httpfs extension loaded.');
+    } catch (e) {
+      console.warn('httpfs extension not available:', e.message);
+      onProgress('httpfs extension unavailable — HTTP sources will not work.');
+    }
+
     onProgress('Loading spatial extension...');
     try {
       await _conn.query(`INSTALL spatial`);
@@ -70,7 +82,7 @@ export async function initDB(onProgress = () => {}) {
       onProgress('Spatial extension loaded.');
     } catch (e) {
       console.warn('Spatial extension not available:', e.message);
-      onProgress('Spatial extension not available. Using client-side WKB parsing.');
+      onProgress('Spatial extension unavailable — using client-side WKB parsing.');
     }
 
     return { db: _db, conn: _conn };
@@ -99,7 +111,7 @@ export async function getConnection() {
  */
 export async function query(sql) {
   const conn = await getConnection();
-  return conn.query(sql);
+  return await conn.query(sql);
 }
 
 /**
@@ -143,6 +155,64 @@ export async function getSchema(source) {
 }
 
 /**
+ * Check whether a geometry column is already typed as GEOMETRY by DuckDB's spatial
+ * extension (e.g. "GEOMETRY('EPSG:4258')") rather than a raw BLOB/VARCHAR.
+ * When spatial is loaded, GeoParquet geometry columns are automatically decoded
+ * to the GEOMETRY type, so ST_GeomFromWKB() must NOT be called on them.
+ *
+ * @param {string} source - Parquet source path.
+ * @param {string} geoColumn - Name of the geometry column.
+ * @returns {Promise<boolean>} true if the column type starts with "GEOMETRY".
+ */
+export async function isGeometryType(source, geoColumn) {
+  // Check cache first to avoid repeated DESCRIBE queries.
+  const cacheKey = source;
+  if (_geomTypeCache.has(cacheKey)) {
+    const cached = _geomTypeCache.get(cacheKey);
+    if (geoColumn in cached) return cached[geoColumn];
+  }
+  try {
+    const schema = await getSchema(source);
+    // Cache results for ALL columns in one go.
+    const entry = {};
+    for (const col of schema) {
+      entry[col.name] = col.type.toUpperCase().startsWith('GEOMETRY');
+    }
+    _geomTypeCache.set(cacheKey, entry);
+    return entry[geoColumn] ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cache the geometry type detection from an already-fetched schema.
+ * Call this after getSchema() to avoid a redundant DESCRIBE query later.
+ */
+export function cacheSchemaGeomTypes(source, schema) {
+  const entry = {};
+  for (const col of schema) {
+    entry[col.name] = col.type.toUpperCase().startsWith('GEOMETRY');
+  }
+  _geomTypeCache.set(source, entry);
+}
+
+/**
+ * Return a SQL expression that produces a GEOMETRY value from a geometry column,
+ * handling both the case where DuckDB has already decoded it as GEOMETRY (spatial
+ * extension loaded) and the raw BLOB/WKB case.
+ *
+ * @param {string} geoColumn - Column name.
+ * @param {boolean} alreadyGeometry - true if the column is already GEOMETRY type.
+ * @returns {string} SQL expression.
+ */
+function geomExpr(geoColumn, alreadyGeometry) {
+  return alreadyGeometry
+    ? `"${geoColumn}"`
+    : `ST_GeomFromWKB("${geoColumn}")`;
+}
+
+/**
  * Get the total row count of a Parquet file.
  */
 export async function getRowCount(source) {
@@ -151,6 +221,91 @@ export async function getRowCount(source) {
     `SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`
   );
   return Number(result.toArray()[0].cnt);
+}
+
+/**
+ * Bootstrap all file metadata in minimal round-trips.
+ * Combines schema, row count, row group size, and KV metadata into a single flow.
+ * For remote files this dramatically reduces HTTP range request overhead since
+ * DuckDB caches the Parquet footer after the first metadata function call.
+ *
+ * @param {string} source - Parquet source path.
+ * @param {Function} onProgress - Status callback.
+ * @returns {Promise<{schema, totalRows, rowGroupSize, kvMetadata, geoMetadata, fileMetadata}>}
+ */
+export async function bootstrapMetadata(source, onProgress = () => {}) {
+  const escaped = escapeSource(source);
+
+  // 1. Schema — also populates geometry type cache for queryData/queryCount
+  onProgress('Reading schema...');
+  const schemaResult = await query(`DESCRIBE SELECT * FROM read_parquet('${escaped}')`);
+  const schema = schemaResult.toArray().map((row) => ({
+    name: String(row.column_name),
+    type: String(row.column_type),
+    nullable: String(row.null) === 'YES'
+  }));
+  cacheSchemaGeomTypes(source, schema);
+
+  // 2. Row count + row group size (footer now cached from step 1)
+  onProgress('Reading parquet stats...');
+  let totalRows = -1;
+  let rowGroupSize = null;
+  try {
+    const statsResult = await query(
+      `SELECT SUM(row_group_num_rows) AS total_rows,
+              FIRST(row_group_num_rows) AS first_rg_size
+       FROM (SELECT DISTINCT row_group_id, row_group_num_rows
+             FROM parquet_metadata('${escaped}'))`
+    );
+    const statsRow = statsResult.toArray()[0];
+    totalRows = Number(statsRow.total_rows);
+    const rgSize = Number(statsRow.first_rg_size);
+    rowGroupSize = rgSize > 0 ? rgSize : null;
+  } catch (e) {
+    console.warn('parquet_metadata failed, falling back to COUNT(*):', e.message);
+    try {
+      const countResult = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
+      totalRows = Number(countResult.toArray()[0].cnt);
+    } catch { /* leave as -1 */ }
+  }
+
+  // 3. KV metadata (includes GeoParquet 'geo' key)
+  onProgress('Reading KV metadata...');
+  let kvMetadata = null;
+  let geoMetadata = null;
+  try {
+    const kvResult = await query(`SELECT key, value FROM parquet_kv_metadata('${escaped}')`);
+    kvMetadata = {};
+    for (const row of kvResult.toArray()) {
+      const key = blobToString(row.key);
+      let value = blobToString(row.value);
+      try { value = JSON.parse(value); } catch { /* keep as string */ }
+      kvMetadata[key] = value;
+    }
+    if (kvMetadata.geo && typeof kvMetadata.geo === 'object') {
+      geoMetadata = kvMetadata.geo;
+    }
+  } catch (e) {
+    console.warn('Could not read KV metadata:', e.message);
+  }
+
+  // 4. File-level schema metadata (parquet_schema)
+  let fileMetadata = null;
+  try {
+    const fileResult = await query(`SELECT * FROM parquet_schema('${escaped}')`);
+    fileMetadata = fileResult.toArray().map((row) => {
+      const obj = {};
+      for (const field of fileResult.schema.fields) {
+        const v = row[field.name];
+        obj[field.name] = typeof v === 'bigint' ? Number(v) : v;
+      }
+      return obj;
+    });
+  } catch (e) {
+    console.warn('Could not read file metadata:', e.message);
+  }
+
+  return { schema, totalRows, rowGroupSize, kvMetadata, geoMetadata, fileMetadata };
 }
 
 /**
@@ -164,54 +319,22 @@ function blobToString(val) {
 }
 
 /**
- * Get Parquet key-value metadata.
- * Returns an object with string keys and parsed (JSON or string) values.
- * Note: DuckDB returns both key and value as BLOB from parquet_kv_metadata.
- */
-export async function getKVMetadata(source) {
-  const escaped = escapeSource(source);
-  const result = await query(
-    `SELECT key, value FROM parquet_kv_metadata('${escaped}')`
-  );
-  const metadata = {};
-  for (const row of result.toArray()) {
-    // Both key and value come as BLOB (Uint8Array) from DuckDB Arrow
-    const key = blobToString(row.key);
-    let value = blobToString(row.value);
-    try {
-      value = JSON.parse(value);
-    } catch {
-      /* keep as string */
-    }
-    metadata[key] = value;
-  }
-  return metadata;
-}
-
-/**
- * Get Parquet file-level metadata (row groups, column statistics).
- */
-export async function getParquetFileMetadata(source) {
-  const escaped = escapeSource(source);
-  const result = await query(
-    `SELECT * FROM parquet_schema('${escaped}')`
-  );
-  return result.toArray().map((row) => {
-    const obj = {};
-    for (const field of result.schema.fields) {
-      const v = row[field.name];
-      obj[field.name] = typeof v === 'bigint' ? Number(v) : v;
-    }
-    return obj;
-  });
-}
-
-/**
  * Get the count of rows matching the given filters and optional bbox.
  */
-export async function queryCount(source, filters = [], bbox = null, geoColumn = null, sourceCrs = null) {
+export async function queryCount(
+  source,
+  filters = [],
+  bbox = null,
+  geoColumn = null,
+  sourceCrs = null,
+  alreadyGeometry = null
+) {
   const escaped = escapeSource(source);
-  const where = buildWhereClause(filters, bbox, geoColumn, sourceCrs);
+  let isAlreadyGeom = alreadyGeometry;
+  if (isAlreadyGeom === null && geoColumn && _spatialLoaded) {
+    isAlreadyGeom = await isGeometryType(source, geoColumn);
+  }
+  const where = buildWhereClause(filters, bbox, geoColumn, sourceCrs, isAlreadyGeom ?? false);
   const result = await query(
     `SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')${where}`
   );
@@ -220,49 +343,70 @@ export async function queryCount(source, filters = [], bbox = null, geoColumn = 
 
 /**
  * Query data with optional filters, column selection, pagination.
- * Returns { arrowTable, rows, features }.
+ *
+ * Reprojection is performed in DuckDB whenever spatial is loaded and sourceCrs is set.
+ *
+ * Returns an Arrow Table. Each row may have:
+ *  - __wkb      (blob)   — when spatial is loaded
+ *  - [geoColumn] (raw WKB blob) — always present for fallback
  */
 export async function queryData(
   source,
-  { geoColumn = null, filters = [], bbox = null, sourceCrs = null, limit = null, offset = 0 } = {}
+  { geoColumn = null, filters = [], bbox = null, sourceCrs = null, limit = null, offset = 0, alreadyGeometry = null, columns = null } = {}
 ) {
   const escaped = escapeSource(source);
 
-  // Build WHERE clause (includes user filters + viewport bbox)
-  const where = buildWhereClause(filters, bbox, geoColumn, sourceCrs);
-
-  // If spatial is loaded and we have a geo column, add GeoJSON conversion
-  // When source CRS is not WGS 84, reproject with ST_Transform first
-  // Note: read_parquet() returns geometry as WKB BLOB, not GEOMETRY type.
-  // ST_GeomFromWKB() is needed to convert before ST_Transform can reproject.
-  let geoSelect = '';
-  if (geoColumn && _spatialLoaded) {
-    let geoExpr = `"${geoColumn}"`;
-    if (sourceCrs) {
-      const crsLiteral = sourceCrs.replace(/'/g, "''");
-      geoExpr = `ST_Transform(ST_GeomFromWKB("${geoColumn}"), '${crsLiteral}', 'EPSG:4326', true)`;
-    }
-    geoSelect = `, ST_AsGeoJSON(${geoExpr}) as __geojson`;
+  // If the caller hasn't told us whether the column is already a GEOMETRY type,
+  // detect it now. This matters because DuckDB spatial auto-decodes GeoParquet
+  // geometry columns to GEOMETRY, making ST_GeomFromWKB() fail with a type error.
+  let isAlreadyGeom = alreadyGeometry;
+  if (isAlreadyGeom === null && geoColumn && _spatialLoaded) {
+    isAlreadyGeom = await isGeometryType(source, geoColumn);
   }
 
-  // Build pagination
+  // Build WHERE clause (filters + optional viewport bbox).
+  const where = buildWhereClause(filters, bbox, geoColumn, sourceCrs, isAlreadyGeom);
+
+  let geoSelect = '';
+  if (geoColumn && _spatialLoaded) {
+    const baseExpr = geomExpr(geoColumn, isAlreadyGeom);
+    if (sourceCrs) {
+      // Reproject to WGS84 when source CRS is known.
+      const crsLiteral = sourceCrs.replace(/'/g, "''");
+      const transformedExpr = `ST_Transform(${baseExpr}, '${crsLiteral}', 'EPSG:4326', true)`;
+      geoSelect = `, ST_AsWKB(${transformedExpr}) as __wkb`;
+    } else {
+      // Data already in WGS84 (or no CRS metadata) — export as WKB.
+      geoSelect = `, ST_AsWKB(${baseExpr}) as __wkb`;
+    }
+  }
+
   let pagination = '';
   if (limit) {
     pagination = ` LIMIT ${limit} OFFSET ${offset}`;
+  } else if (offset > 0) {
+    pagination = ` OFFSET ${offset}`;
   }
 
-  const sql = `SELECT *${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
-  console.log('Query:', sql);
+  // Select only requested columns (+ geo) instead of * when a column list is provided.
+  // This avoids fetching large unused columns (bbox structs, binary blobs, etc.)
+  // and significantly reduces data transfer for wide tables.
+  let selectCols = '*';
+  if (columns && columns.length > 0) {
+    selectCols = columns.map((c) => `"${c}"`).join(', ');
+  }
+
+  const sql = `SELECT ${selectCols}${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
+
   return query(sql);
 }
 
 /**
  * Build a SQL WHERE clause from user filters + optional viewport bbox.
  */
-function buildWhereClause(filters, bbox = null, geoColumn = null, sourceCrs = null) {
+function buildWhereClause(filters, bbox = null, geoColumn = null, sourceCrs = null, alreadyGeometry = false) {
   const conditions = [];
 
-  // User-defined column filters
   if (filters && filters.length > 0) {
     const fc = filters
       .filter(
@@ -275,20 +419,18 @@ function buildWhereClause(filters, bbox = null, geoColumn = null, sourceCrs = nu
     conditions.push(...fc);
   }
 
-  // Spatial viewport bbox filter (requires spatial extension)
-  // Viewport bbox is always in EPSG:4326; transform to source CRS if needed
+  // Spatial viewport bbox filter — only when spatial extension is loaded.
   if (bbox && geoColumn && _spatialLoaded) {
     const [west, south, east, north] = bbox;
     const envelope = `ST_MakeEnvelope(${west}, ${south}, ${east}, ${north})`;
+    const baseExpr = geomExpr(geoColumn, alreadyGeometry);
     if (sourceCrs) {
       const crsLiteral = sourceCrs.replace(/'/g, "''");
       conditions.push(
-        `ST_Intersects(ST_GeomFromWKB("${geoColumn}"), ST_Transform(${envelope}, 'EPSG:4326', '${crsLiteral}', true))`
+        `ST_Intersects(${baseExpr}, ST_Transform(${envelope}, 'EPSG:4326', '${crsLiteral}', true))`
       );
     } else {
-      conditions.push(
-        `ST_Intersects("${geoColumn}", ${envelope})`
-      );
+      conditions.push(`ST_Intersects(${baseExpr}, ${envelope})`);
     }
   }
 

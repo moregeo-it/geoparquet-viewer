@@ -1,5 +1,5 @@
 <template>
-  <div class="pa-2 bg-grey-lighten-4" style="border-bottom: 1px solid #ddd">
+    <div class="pa-2 filter-panel" style="border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity))">
     <div class="d-flex align-center ga-2">
       <span class="text-body-2 font-weight-bold">Filters</span>
       <v-btn size="x-small" variant="tonal" prepend-icon="mdi-plus" @click="addFilter">
@@ -50,7 +50,7 @@
         </v-btn>
       </div>
       <div class="mt-1">
-        <v-btn size="x-small" color="primary" variant="flat" @click="apply">
+        <v-btn size="small" color="primary" variant="flat" @click="apply">
           Apply Filters
         </v-btn>
       </div>
@@ -127,3 +127,9 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.filter-panel {
+  background: rgb(var(--v-theme-surface));
+}
+</style>
