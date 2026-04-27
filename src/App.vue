@@ -1,7 +1,7 @@
 <template>
   <v-app>
-    <v-app-bar color="surface" density="compact" flat elevation="1">
-      <v-app-bar-title class="text-body-1 font-weight-bold flex-grow-0 mr-4">
+    <v-app-bar density="compact" flat elevation="1">
+      <v-app-bar-title >
         GeoParquet Viewer
       </v-app-bar-title>
       <v-spacer />
@@ -33,13 +33,12 @@
 
     <v-main>
       <div class="d-flex flex-column fill-height">
-        <div v-if="source" class="source-toolbar-wrapper flex-grow-0">
-          <v-toolbar density="compact" color="surface" flat>
+        <div v-if="source">
+          <v-toolbar density="compact" flat>
             <v-toolbar-title class="text-caption">
               {{ displaySource }}
             </v-toolbar-title>
-            <v-spacer />
-            <span class="text-caption text-grey-lighten-1 mr-3">
+            <span class="text-caption mr-3">
               <template v-if="filteredCount !== null && filteredCount !== totalRows">
                 {{ filteredCount.toLocaleString() }} matched &middot;
               </template>
@@ -80,11 +79,7 @@
               :loading="loading"
               @select="onTableSelect"
             />
-            <div
-              v-if="hasMore"
-              class="d-flex justify-center ga-2 pa-1"
-              style="border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity))"
-            >
+            <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1">
               <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
                 Load more ({{ pageSize.toLocaleString() }} rows)
               </v-btn>
@@ -773,22 +768,6 @@ export default {
 }
 .snotifyToast__body {
   font-size: 0.85em;
-}
-
-/* Remove padding from v-main to use full space */
-:deep(.v-main) {
-  padding: 0 !important;
-}
-
-/* Ensure content-panels fills all available space */
-.source-toolbar-wrapper {
-  position: relative;
-}
-.toolbar-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
 }
 
 .content-panels {
