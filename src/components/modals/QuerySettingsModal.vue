@@ -6,6 +6,7 @@
   >
     <v-card>
       <v-card-title>Query Preferences</v-card-title>
+      <v-divider />
       <v-card-text>
         <!-- File summary -->
         <div class="d-flex ga-4 mb-4 text-body-2 text-grey-darken-1">

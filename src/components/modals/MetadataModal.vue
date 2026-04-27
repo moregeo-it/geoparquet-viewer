@@ -13,6 +13,7 @@
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
+      <v-divider />
       <v-card-text>
         <pre
           v-if="typeof formattedData === 'string'"

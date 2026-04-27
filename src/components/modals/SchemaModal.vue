@@ -2,11 +2,18 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="800"
+    width="auto"
     scrollable
   >
     <v-card>
-      <v-card-title>Schema</v-card-title>
+      <v-card-title class="d-flex align-center">
+        Schema
+        <v-spacer />
+        <v-btn icon size="small" variant="text" @click="$emit('update:modelValue', false)">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </v-card-title>
+      <v-divider />
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -73,10 +80,6 @@
           </v-table>
         </template>
       </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn @click="$emit('update:modelValue', false)">Close</v-btn>
-      </v-card-actions>
     </v-card>
   </v-dialog>
 </template>

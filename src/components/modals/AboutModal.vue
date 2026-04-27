@@ -12,6 +12,7 @@
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
+      <v-divider />
       <v-card-text>
         <p class="mb-3">A performant GeoParquet Viewer for the Web.</p>
         <v-list density="compact" class="pa-0 mb-3">

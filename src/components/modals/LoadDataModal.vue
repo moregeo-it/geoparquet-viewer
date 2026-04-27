@@ -2,10 +2,11 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="600"
+    width="auto"
   >
     <v-card>
       <v-card-title>Load Data</v-card-title>
+      <v-divider />
       <v-card-text>
         <h3 class="text-subtitle-1 font-weight-bold mb-2">From URL</h3>
         <v-text-field
