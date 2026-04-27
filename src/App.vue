@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <v-app-bar density="compact" flat>
+    <v-app-bar color="surface-variant" density="compact" flat>
       <v-app-bar-title >
         GeoParquet Viewer
       </v-app-bar-title>
