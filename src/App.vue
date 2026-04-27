@@ -1,14 +1,21 @@
 <template>
   <v-app>
     <v-app-bar color="surface-variant" density="compact">
-      <v-app-bar-title> GeoParquet Viewer </v-app-bar-title>
+      <v-app-bar-title>
+        GeoParquet Viewer
+        <v-chip size="x-small" color="warning" class="ml-1 mb-1">experimental</v-chip>
+      </v-app-bar-title>
       <v-spacer />
       <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
       <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
       <template v-if="fileMetadata || schema || kvMetadata || geoMetadata">
         <v-divider vertical class="ma-2" />
-        <v-btn v-if="fileMetadata" size="small" @click="openMetadataDialog('Parquet File Metadata', fileMetadata)">
+        <v-btn
+          v-if="fileMetadata"
+          size="small"
+          @click="openMetadataDialog('Parquet File Metadata', fileMetadata)"
+        >
           File
         </v-btn>
         <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Structure</v-btn>
@@ -17,8 +24,11 @@
             <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
           </template>
           <v-list density="compact">
-            <v-list-item v-if="geoMetadata" title="GeoParquet Metadata"
-              @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)" />
+            <v-list-item
+              v-if="geoMetadata"
+              title="GeoParquet Metadata"
+              @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)"
+            />
             <v-list-item
               v-if="kvMetadata"
               title="Other Metadata"
