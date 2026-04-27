@@ -5,6 +5,7 @@
       <v-spacer />
       <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
+      <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
       <template v-if="source">
         <v-divider vertical class="ma-2" />
         <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Schema</v-btn>
@@ -139,6 +140,12 @@
       :data="metadataDialogData"
     />
     <AboutModal v-model="aboutDialogOpen" />
+    <ConvertModal
+      v-model="convertDialogOpen"
+      :has-geometry="!!primaryGeoColumn"
+      :default-name="defaultExportName"
+      @convert="startConvert"
+    />
     <QuerySettingsModal
       v-model="querySettingsOpen"
       :schema="schema || []"
@@ -197,10 +204,13 @@ import FilterPanel from './components/FilterPanel.vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
+import ConvertModal from './components/modals/ConvertModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
 import MetadataModal from './components/modals/MetadataModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
+
+import { startConversion } from './converter.js';
 
 const DEFAULT_PAGE_SIZE = 10000;
 
@@ -223,6 +233,7 @@ export default {
     FilterPanel,
     LoadingOverlay,
     AboutModal,
+    ConvertModal,
     LoadDataModal,
     MetadataModal,
     QuerySettingsModal,
@@ -234,6 +245,13 @@ export default {
       source: null,
       displaySource: '',
       localFileName: null,
+      localFileBuffer: null,
+
+      // Conversion
+      convertDialogOpen: false,
+      conversionHandle: null,
+      conversionToastId: null,
+      conversionStatus: '',
 
       // Schema & metadata
       schema: null,
@@ -409,6 +427,12 @@ export default {
     remainingRows() {
       const total = this.filteredCount !== null ? this.filteredCount : this.totalRows;
       return Math.max(0, total - this.loadedCount);
+    },
+    /** Suggested filename (no extension) when exporting */
+    defaultExportName() {
+      const src = this.displaySource || this.source || 'export';
+      const base = src.split(/[\\/]/).pop() || 'export';
+      return base.replace(/\.[^.]+$/, '') || 'export';
     }
   },
   mounted() {
@@ -486,6 +510,7 @@ export default {
         const buffer = await file.arrayBuffer();
         await registerLocalFile(name, buffer);
         this.localFileName = name;
+        this.localFileBuffer = buffer;
         await this.loadData();
       } catch (e) {
         this.setError(e);
@@ -500,6 +525,12 @@ export default {
       this.source = null;
       this.displaySource = '';
       this.localFileName = null;
+      this.localFileBuffer = null;
+      if (this.conversionHandle) {
+        this.conversionHandle.cancel();
+        this.conversionHandle = null;
+      }
+      this.conversionToastId = null;
       this.schema = null;
       this.kvMetadata = null;
       this.geoMetadata = null;
@@ -753,6 +784,104 @@ export default {
         if (gen !== this.viewportGeneration) return '';
         return `Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`;
       });
+    },
+
+    // ── File conversion ───────────────────────────────────
+    startConvert({ format, outputName }) {
+      // Cancel any stale/in-progress conversion before starting a new one.
+      if (this.conversionHandle) {
+        this.conversionHandle.cancel();
+        this.conversionHandle = null;
+        if (this.conversionToastId != null) {
+          this.$snotify.remove(this.conversionToastId);
+          this.conversionToastId = null;
+        }
+      }
+
+      // For local files we re-register inside the worker (separate DuckDB
+      // instance). Transfer the buffer directly and clear the local reference
+      // to free memory — the buffer becomes detached after transfer.
+      const isLocal = !!this.localFileBuffer;
+      const sourceBuffer = isLocal ? this.localFileBuffer : null;
+      if (isLocal) {
+        this.localFileBuffer = null;
+      }
+
+      const handle = startConversion({
+        source: this.source,
+        sourceBuffer,
+        format,
+        outputName,
+        schema: this.schema,
+        geoColumns: this.geoColumns,
+        primaryGeoColumn: this.primaryGeoColumn,
+        sourceCrs: this.sourceCrsString,
+        onStatus: (msg) => {
+          this.conversionStatus = msg;
+          // Update toast body in place when possible. Snotify exposes
+          // `notifications` as the live array of active toasts; mutating
+          // `body` triggers a re-render. Falls back silently if internals
+          // change in a future snotify version.
+          const toasts = this.$snotify?.notifications;
+          if (this.conversionToastId != null && Array.isArray(toasts)) {
+            const t = toasts.find((n) => n.id === this.conversionToastId);
+            if (t) t.body = msg;
+          }
+        }
+      });
+      this.conversionHandle = handle;
+      this.conversionStatus = 'Starting conversion...';
+
+      const toast = this.$snotify.async(
+        this.conversionStatus,
+        'Converting file',
+        () =>
+          handle.promise
+            .then((res) => ({
+              title: 'Conversion complete',
+              body: `Downloaded ${res.filename}.`,
+              config: { timeout: 5000, closeOnClick: true, buttons: [] }
+            }))
+            .catch((err) => {
+              const info = friendlyError(err);
+              throw {
+                title: info.title || 'Conversion failed',
+                body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
+                config: { timeout: 0, closeOnClick: true }
+              };
+            }),
+        {
+          closeOnClick: false,
+          timeout: 0,
+          buttons: [
+            {
+              text: 'Cancel',
+              action: (t) => {
+                this.cancelConversion();
+                this.$snotify.remove(t.id);
+              },
+              bold: false
+            }
+          ]
+        }
+      );
+      this.conversionToastId = toast?.id ?? null;
+
+      // Always clear the handle when the conversion finishes (success or fail).
+      handle.promise.finally(() => {
+        if (this.conversionHandle === handle) {
+          this.conversionHandle = null;
+          this.conversionToastId = null;
+        }
+      });
+    },
+
+    cancelConversion() {
+      if (!this.conversionHandle) return;
+      this.conversionHandle.cancel();
+      this.conversionHandle = null;
+      this.conversionToastId = null;
+      this.$snotify.warning('Conversion cancelled.', { timeout: 3000 });
     }
   }
 };
