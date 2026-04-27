@@ -3,7 +3,6 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     max-width="700"
-    persistent
   >
     <v-card>
       <v-card-title>Query Preferences</v-card-title>
