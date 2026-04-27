@@ -33,30 +33,6 @@
 
     <v-main>
       <div class="d-flex flex-column fill-height">
-        <div v-if="source">
-          <v-toolbar density="compact" flat>
-            <v-toolbar-title class="text-caption">
-              {{ displaySource }}
-            </v-toolbar-title>
-            <span class="text-caption mr-3">
-              <template v-if="filteredCount !== null && filteredCount !== totalRows">
-                {{ filteredCount.toLocaleString() }} matched &middot;
-              </template>
-              {{ loadedCount.toLocaleString() }} loaded /
-              {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
-            </span>
-            <v-icon
-              v-if="schema"
-              size="small"
-              variant="text"
-              class="mr-3"
-              @click="reopenQuerySettings"
-            >
-              mdi-cog
-            </v-icon>
-          </v-toolbar>
-        </div>
-
         <vue-snotify />
 
         <div
@@ -108,6 +84,30 @@
               @reloadViewport="reloadForViewport"
             />
           </div>
+        </div>
+
+        <div v-if="source">
+          <v-toolbar density="compact" flat>
+            <v-toolbar-title class="text-caption">
+              {{ displaySource }}
+            </v-toolbar-title>
+            <span class="text-caption mr-3">
+              <template v-if="filteredCount !== null && filteredCount !== totalRows">
+                {{ filteredCount.toLocaleString() }} matched &middot;
+              </template>
+              {{ loadedCount.toLocaleString() }} loaded /
+              {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
+            </span>
+            <v-icon
+              v-if="schema"
+              size="small"
+              variant="text"
+              class="mr-3"
+              @click="reopenQuerySettings"
+            >
+              mdi-cog
+            </v-icon>
+          </v-toolbar>
         </div>
 
         <div
