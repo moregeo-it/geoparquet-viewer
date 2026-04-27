@@ -47,8 +47,10 @@ export function startConversion({
 }) {
   const worker = new ConverterWorker();
   let cancelled = false;
+  let rejectFn;
 
   const promise = new Promise((resolve, reject) => {
+    rejectFn = reject;
     worker.onmessage = (ev) => {
       const m = ev.data;
       if (!m) return;
@@ -113,6 +115,7 @@ export function startConversion({
       if (cancelled) return;
       cancelled = true;
       worker.terminate();
+      rejectFn(new DOMException('Conversion cancelled', 'AbortError'));
     }
   };
 }

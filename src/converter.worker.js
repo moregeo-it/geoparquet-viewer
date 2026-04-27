@@ -3,7 +3,7 @@
  *
  * Runs an isolated DuckDB-WASM instance off the main thread to convert the
  * currently loaded Parquet source into a different file format (CSV, NDJSON,
- * GeoJSON, Parquet) using DuckDB's COPY statement.
+ * or GeoJSON) using DuckDB's COPY statement.
  *
  * The conversion runs end-to-end in this worker. Progress is communicated via
  * `status` messages (we don't have row-level progress for single-shot COPY,
@@ -188,11 +188,15 @@ async function convert({
     }
   }
 
-  // Transfer the underlying ArrayBuffer to avoid copying.
-  const ab = result.buffer.buffer.slice(
-    result.buffer.byteOffset,
-    result.buffer.byteOffset + result.buffer.byteLength
-  );
+  // Transfer the underlying ArrayBuffer without copying when the view already
+  // spans the full buffer; otherwise fall back to slicing so the host still
+  // receives exactly the exported bytes.
+  const view = result.buffer;
+  const backing = view.buffer;
+  const ab =
+    view.byteOffset === 0 && view.byteLength === backing.byteLength
+      ? backing
+      : backing.slice(view.byteOffset, view.byteOffset + view.byteLength);
   post({ type: 'done', buffer: ab, mime: result.mime, ext: result.ext }, [ab]);
 }
 

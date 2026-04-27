@@ -5,13 +5,7 @@
       <v-spacer />
       <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
-      <v-btn
-        v-if="source"
-        size="small"
-        @click="convertDialogOpen = true"
-      >
-        Convert
-      </v-btn>
+      <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
       <template v-if="source">
         <v-divider vertical class="ma-2" />
         <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Schema</v-btn>
@@ -805,9 +799,13 @@ export default {
       }
 
       // For local files we re-register inside the worker (separate DuckDB
-      // instance). Pass a copy of the buffer so the original stays usable.
+      // instance). Transfer the buffer directly and clear the local reference
+      // to free memory — the buffer becomes detached after transfer.
       const isLocal = !!this.localFileBuffer;
-      const sourceBuffer = isLocal ? this.localFileBuffer.slice(0) : null;
+      const sourceBuffer = isLocal ? this.localFileBuffer : null;
+      if (isLocal) {
+        this.localFileBuffer = null;
+      }
 
       const handle = startConversion({
         source: this.source,
