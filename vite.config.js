@@ -26,11 +26,11 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'duckdb': ['@duckdb/duckdb-wasm'],
-          'deckgl': ['@deck.gl/core', '@deck.gl/layers', '@deck.gl/mapbox'],
-          'maplibre': ['maplibre-gl'],
-          'vuetify': ['vuetify'],
+        manualChunks(id) {
+          if (id.includes('@duckdb/duckdb-wasm')) return 'duckdb';
+          if (id.includes('@deck.gl/')) return 'deckgl';
+          if (id.includes('maplibre-gl')) return 'maplibre';
+          if (id.includes('vuetify')) return 'vuetify';
         },
       },
     },

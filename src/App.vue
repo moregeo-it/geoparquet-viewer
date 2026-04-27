@@ -1,9 +1,7 @@
 <template>
   <v-app>
     <v-app-bar color="surface-variant" density="compact">
-      <v-app-bar-title >
-        GeoParquet Viewer
-      </v-app-bar-title>
+      <v-app-bar-title> GeoParquet Viewer </v-app-bar-title>
       <v-spacer />
       <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
@@ -122,13 +120,7 @@
           {{ loadedCount.toLocaleString() }} loaded /
           {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
         </span>
-        <v-icon
-          v-if="schema"
-          size="small"
-          variant="text"
-          class="mr-3"
-          @click="reopenQuerySettings"
-        >
+        <v-icon v-if="schema" size="small" variant="text" class="mr-3" @click="reopenQuerySettings">
           mdi-cog
         </v-icon>
       </v-toolbar>
@@ -781,7 +773,9 @@ export default {
 }
 
 .v-footer {
-  box-shadow: 0px -1px 2px 0px rgba(var(--v-shadow-color), var(--v-shadow-key-opacity, 0.3)), 0px -2px 6px 2px rgba(var(--v-shadow-color), var(--v-shadow-ambient-opacity, 0.15));
+  box-shadow:
+    0px -1px 2px 0px rgba(var(--v-shadow-color), var(--v-shadow-key-opacity, 0.3)),
+    0px -2px 6px 2px rgba(var(--v-shadow-color), var(--v-shadow-ambient-opacity, 0.15));
 }
 
 .v-footer .v-toolbar {
