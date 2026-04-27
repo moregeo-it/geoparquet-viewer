@@ -2,11 +2,17 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="900"
+    max-width="960"
     scrollable
   >
     <v-card>
-      <v-card-title>{{ title }}</v-card-title>
+      <v-card-title class="d-flex align-center">
+        {{ title }}
+        <v-spacer />
+        <v-btn icon size="small" variant="text" @click="$emit('update:modelValue', false)">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </v-card-title>
       <v-card-text>
         <pre
           v-if="typeof formattedData === 'string'"
@@ -25,10 +31,6 @@
           <template #bottom />
         </v-data-table>
       </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn @click="$emit('update:modelValue', false)">Close</v-btn>
-      </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
