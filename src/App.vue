@@ -8,7 +8,6 @@
       <v-btn
         v-if="source"
         size="small"
-        :disabled="!!conversionHandle"
         @click="convertDialogOpen = true"
       >
         Convert
@@ -795,7 +794,15 @@ export default {
 
     // ── File conversion ───────────────────────────────────
     startConvert({ format, outputName }) {
-      if (this.conversionHandle) return;
+      // Cancel any stale/in-progress conversion before starting a new one.
+      if (this.conversionHandle) {
+        this.conversionHandle.cancel();
+        this.conversionHandle = null;
+        if (this.conversionToastId != null) {
+          this.$snotify.remove(this.conversionToastId);
+          this.conversionToastId = null;
+        }
+      }
 
       // For local files we re-register inside the worker (separate DuckDB
       // instance). Pass a copy of the buffer so the original stays usable.
@@ -835,7 +842,7 @@ export default {
             .then((res) => ({
               title: 'Conversion complete',
               body: `Downloaded ${res.filename}.`,
-              config: { timeout: 5000, closeOnClick: true }
+              config: { timeout: 5000, closeOnClick: true, buttons: [] }
             }))
             .catch((err) => {
               const info = friendlyError(err);

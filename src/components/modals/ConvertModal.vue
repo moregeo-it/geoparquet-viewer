@@ -9,7 +9,7 @@
       <v-card-text>
         <p class="text-body-2 mb-3">
           Convert the currently loaded file to another format. The full file is converted in a
-          background worker; the UI stays responsive.
+          background worker, which may take a while.
         </p>
         <v-radio-group v-model="format" hide-details density="compact">
           <v-radio
