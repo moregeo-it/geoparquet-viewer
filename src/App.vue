@@ -1,63 +1,43 @@
 <template>
   <v-app>
-    <v-app-bar color="surface" density="compact" flat elevation="1">
-      <v-app-bar-title class="text-body-1 font-weight-bold flex-grow-0 mr-4">
+    <v-app-bar color="surface-variant" density="compact">
+      <v-app-bar-title >
         GeoParquet Viewer
       </v-app-bar-title>
       <v-spacer />
+      <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
-      <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Schema</v-btn>
-      <v-btn
-        v-if="kvMetadata"
-        size="small"
-        @click="openMetadataDialog('Key-Value Metadata', kvMetadata)"
-      >
-        KV Metadata
-      </v-btn>
-      <v-btn
-        v-if="geoMetadata"
-        size="small"
-        @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)"
-      >
-        Geo Metadata
-      </v-btn>
-      <v-btn
-        v-if="fileMetadata"
-        size="small"
-        @click="openMetadataDialog('Parquet File Metadata', fileMetadata)"
-      >
-        File Info
-      </v-btn>
+      <template v-if="source">
+        <v-divider vertical class="ma-2" />
+        <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Schema</v-btn>
+        <v-btn
+          v-if="kvMetadata"
+          size="small"
+          @click="openMetadataDialog('Key-Value Metadata', kvMetadata)"
+        >
+          KV Metadata
+        </v-btn>
+        <v-btn
+          v-if="geoMetadata"
+          size="small"
+          @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)"
+        >
+          Geo Metadata
+        </v-btn>
+        <v-btn
+          v-if="fileMetadata"
+          size="small"
+          @click="openMetadataDialog('Parquet File Metadata', fileMetadata)"
+        >
+          File Info
+        </v-btn>
+      </template>
+      <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
     </v-app-bar>
 
     <v-main>
       <div class="d-flex flex-column fill-height">
-        <div v-if="source" class="source-toolbar-wrapper flex-grow-0">
-          <v-toolbar density="compact" color="surface" flat>
-            <v-toolbar-title class="text-caption">
-              {{ displaySource }}
-            </v-toolbar-title>
-            <v-spacer />
-            <span class="text-caption text-grey-lighten-1 mr-3">
-              <template v-if="filteredCount !== null && filteredCount !== totalRows">
-                {{ filteredCount.toLocaleString() }} matched &middot;
-              </template>
-              {{ loadedCount.toLocaleString() }} loaded /
-              {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
-            </span>
-            <v-icon
-              v-if="schema"
-              size="small"
-              variant="text"
-              class="mr-3"
-              @click="reopenQuerySettings"
-            >
-              mdi-cog
-            </v-icon>
-          </v-toolbar>
-        </div>
-
         <vue-snotify />
 
         <div
@@ -80,11 +60,7 @@
               :loading="loading"
               @select="onTableSelect"
             />
-            <div
-              v-if="hasMore"
-              class="d-flex justify-center ga-2 pa-1"
-              style="border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity))"
-            >
+            <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1">
               <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
                 Load more ({{ pageSize.toLocaleString() }} rows)
               </v-btn>
@@ -133,6 +109,30 @@
         </div>
       </div>
     </v-main>
+
+    <v-footer v-if="source" app height="auto" class="pa-0">
+      <v-toolbar density="compact">
+        <v-toolbar-title>
+          <span class="footer-text">{{ displaySource }}</span>
+        </v-toolbar-title>
+        <span class="footer-text mr-3">
+          <template v-if="filteredCount !== null && filteredCount !== totalRows">
+            {{ filteredCount.toLocaleString() }} matched &middot;
+          </template>
+          {{ loadedCount.toLocaleString() }} loaded /
+          {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
+        </span>
+        <v-icon
+          v-if="schema"
+          size="small"
+          variant="text"
+          class="mr-3"
+          @click="reopenQuerySettings"
+        >
+          mdi-cog
+        </v-icon>
+      </v-toolbar>
+    </v-footer>
 
     <LoadDataModal
       v-model="loadDialogOpen"
@@ -775,25 +775,26 @@ export default {
   font-size: 0.85em;
 }
 
-/* Remove padding from v-main to use full space */
-:deep(.v-main) {
-  padding: 0 !important;
-}
-
-/* Ensure content-panels fills all available space */
-.source-toolbar-wrapper {
-  position: relative;
-}
-.toolbar-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-}
-
 .content-panels {
-  height: calc(100vh - 48px - 48px); /* 100vh - appbar(48px) - toolbar(48px) */
+  height: calc(100vh - 48px - 36px); /* 100vh - appbar(48px) - toolbar(36px) */
   overflow: hidden;
+}
+
+.v-footer {
+  box-shadow: 0px -1px 2px 0px rgba(var(--v-shadow-color), var(--v-shadow-key-opacity, 0.3)), 0px -2px 6px 2px rgba(var(--v-shadow-color), var(--v-shadow-ambient-opacity, 0.15));
+}
+
+.v-footer .v-toolbar {
+  --v-toolbar-height: 36px;
+}
+
+.v-footer .v-toolbar .v-toolbar__content {
+  height: 36px !important;
+  min-height: 36px !important;
+}
+
+.v-footer .footer-text {
+  font-size: 0.75rem;
 }
 
 .left-panel {

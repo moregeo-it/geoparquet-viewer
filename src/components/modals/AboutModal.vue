@@ -2,10 +2,17 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="550"
+    width="auto"
   >
     <v-card>
-      <v-card-title>About</v-card-title>
+      <v-card-title class="d-flex align-center">
+        About
+        <v-spacer />
+        <v-btn icon size="small" variant="text" @click="$emit('update:modelValue', false)">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </v-card-title>
+      <v-divider />
       <v-card-text>
         <p class="mb-3">A performant GeoParquet Viewer for the Web.</p>
         <v-list density="compact" class="pa-0 mb-3">
@@ -53,10 +60,6 @@
           <a href="https://github.com" target="_blank">GitHub</a>.
         </p>
       </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn @click="$emit('update:modelValue', false)">Close</v-btn>
-      </v-card-actions>
     </v-card>
   </v-dialog>
 </template>

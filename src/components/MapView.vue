@@ -109,7 +109,7 @@ export default {
         attributionControl: true
       });
 
-      this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
+      this.map.addControl(new maplibregl.NavigationControl({ showCompass: false}), 'top-right');
 
       this.overlay = new MapboxOverlay({ layers: [], interleaved: false });
       this.map.addControl(this.overlay);
