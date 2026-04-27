@@ -1,33 +1,38 @@
 <template>
   <v-app>
-    <v-app-bar color="surface-variant" density="compact" flat>
+    <v-app-bar color="surface-variant" density="compact">
       <v-app-bar-title >
         GeoParquet Viewer
       </v-app-bar-title>
       <v-spacer />
+      <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
-      <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Schema</v-btn>
-      <v-btn
-        v-if="kvMetadata"
-        size="small"
-        @click="openMetadataDialog('Key-Value Metadata', kvMetadata)"
-      >
-        KV Metadata
-      </v-btn>
-      <v-btn
-        v-if="geoMetadata"
-        size="small"
-        @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)"
-      >
-        Geo Metadata
-      </v-btn>
-      <v-btn
-        v-if="fileMetadata"
-        size="small"
-        @click="openMetadataDialog('Parquet File Metadata', fileMetadata)"
-      >
-        File Info
-      </v-btn>
+      <template v-if="source">
+        <v-divider vertical class="ma-2" />
+        <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Schema</v-btn>
+        <v-btn
+          v-if="kvMetadata"
+          size="small"
+          @click="openMetadataDialog('Key-Value Metadata', kvMetadata)"
+        >
+          KV Metadata
+        </v-btn>
+        <v-btn
+          v-if="geoMetadata"
+          size="small"
+          @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)"
+        >
+          Geo Metadata
+        </v-btn>
+        <v-btn
+          v-if="fileMetadata"
+          size="small"
+          @click="openMetadataDialog('Parquet File Metadata', fileMetadata)"
+        >
+          File Info
+        </v-btn>
+      </template>
+      <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
     </v-app-bar>
 
@@ -86,30 +91,6 @@
           </div>
         </div>
 
-        <div v-if="source">
-          <v-toolbar density="compact" flat>
-            <v-toolbar-title class="text-caption">
-              {{ displaySource }}
-            </v-toolbar-title>
-            <span class="text-caption mr-3">
-              <template v-if="filteredCount !== null && filteredCount !== totalRows">
-                {{ filteredCount.toLocaleString() }} matched &middot;
-              </template>
-              {{ loadedCount.toLocaleString() }} loaded /
-              {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
-            </span>
-            <v-icon
-              v-if="schema"
-              size="small"
-              variant="text"
-              class="mr-3"
-              @click="reopenQuerySettings"
-            >
-              mdi-cog
-            </v-icon>
-          </v-toolbar>
-        </div>
-
         <div
           v-else
           class="d-flex flex-column align-center justify-center flex-grow-1 text-center pa-8"
@@ -128,6 +109,30 @@
         </div>
       </div>
     </v-main>
+
+    <v-footer v-if="source" app height="auto" class="pa-0">
+      <v-toolbar density="compact">
+        <v-toolbar-title>
+          <span class="footer-text">{{ displaySource }}</span>
+        </v-toolbar-title>
+        <span class="footer-text mr-3">
+          <template v-if="filteredCount !== null && filteredCount !== totalRows">
+            {{ filteredCount.toLocaleString() }} matched &middot;
+          </template>
+          {{ loadedCount.toLocaleString() }} loaded /
+          {{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }} total
+        </span>
+        <v-icon
+          v-if="schema"
+          size="small"
+          variant="text"
+          class="mr-3"
+          @click="reopenQuerySettings"
+        >
+          mdi-cog
+        </v-icon>
+      </v-toolbar>
+    </v-footer>
 
     <LoadDataModal
       v-model="loadDialogOpen"
@@ -771,8 +776,25 @@ export default {
 }
 
 .content-panels {
-  height: calc(100vh - 48px - 48px); /* 100vh - appbar(48px) - toolbar(48px) */
+  height: calc(100vh - 48px - 36px); /* 100vh - appbar(48px) - toolbar(36px) */
   overflow: hidden;
+}
+
+.v-footer {
+  box-shadow: 0px -1px 2px 0px rgba(var(--v-shadow-color), var(--v-shadow-key-opacity, 0.3)), 0px -2px 6px 2px rgba(var(--v-shadow-color), var(--v-shadow-ambient-opacity, 0.15));
+}
+
+.v-footer .v-toolbar {
+  --v-toolbar-height: 36px;
+}
+
+.v-footer .v-toolbar .v-toolbar__content {
+  height: 36px !important;
+  min-height: 36px !important;
+}
+
+.v-footer .footer-text {
+  font-size: 0.75rem;
 }
 
 .left-panel {
