@@ -341,7 +341,7 @@ export default {
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2;
+  z-index: 100;
   padding: 6px 16px;
   background: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-on-primary));

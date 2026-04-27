@@ -83,22 +83,6 @@
           hide-details
           style="max-width: 280px"
         />
-
-        <!-- Spatial filtering toggle -->
-        <template v-if="hasBboxCovering">
-          <v-divider class="my-4" />
-          <h3 class="text-subtitle-2 font-weight-bold mb-1">Spatial filtering</h3>
-          <v-switch
-            v-model="localSpatialFilter"
-            label="Filter data by map viewport"
-            density="compact"
-            hide-details
-            color="primary"
-          />
-          <p class="text-caption text-grey-darken-1 mt-1">
-            When enabled, only rows within the visible map area are loaded.
-          </p>
-        </template>
       </v-card-text>
       <v-card-actions>
         <span class="text-caption text-grey ml-2">
@@ -134,8 +118,7 @@ export default {
   data() {
     return {
       localSelectedColumns: [],
-      localPageSize: 10000,
-      localSpatialFilter: true
+      localPageSize: 10000
     };
   },
   computed: {
@@ -204,7 +187,6 @@ export default {
       }
 
       this.localPageSize = d.pageSize || 10000;
-      this.localSpatialFilter = d.spatialFilterEnabled !== false;
     },
     selectAllColumns() {
       this.localSelectedColumns = this.availableColumns.map((c) => c.name);
@@ -224,8 +206,7 @@ export default {
     submit() {
       this.$emit('apply', {
         selectedColumns: [...this.localSelectedColumns],
-        pageSize: this.localPageSize,
-        spatialFilterEnabled: this.localSpatialFilter
+        pageSize: this.localPageSize
       });
       this.$emit('update:modelValue', false);
     }
