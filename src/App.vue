@@ -9,30 +9,32 @@
       <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
       <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
-      <template v-if="fileMetadata || schema || kvMetadata || geoMetadata">
+      <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
         <v-divider vertical class="ma-2" />
-        <v-btn
-          v-if="fileMetadata"
-          size="small"
-          @click="openMetadataDialog('Parquet File Metadata', fileMetadata)"
-        >
-          File
-        </v-btn>
-        <v-btn v-if="schema" size="small" @click="schemaDialogOpen = true">Structure</v-btn>
-        <v-menu v-if="kvMetadata || geoMetadata">
+        <v-btn v-if="fileInfo" size="small" @click="fileInfoDialogOpen = true"> File </v-btn>
+        <v-menu v-if="parquetSchema || source">
+          <template #activator="{ props }">
+            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Structure</v-btn>
+          </template>
+          <v-list density="compact">
+            <v-list-item v-if="parquetSchema" title="Schema" @click="schemaDialogOpen = true" />
+            <v-list-item
+              v-if="source"
+              title="Parquet Stats"
+              @click="parquetStatsDialogOpen = true"
+            />
+          </v-list>
+        </v-menu>
+        <v-menu v-if="kvMenuItems.length">
           <template #activator="{ props }">
             <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
           </template>
           <v-list density="compact">
             <v-list-item
-              v-if="geoMetadata"
-              title="GeoParquet Metadata"
-              @click="openMetadataDialog('GeoParquet Metadata', geoMetadata)"
-            />
-            <v-list-item
-              v-if="kvMetadata"
-              title="Other Metadata"
-              @click="openMetadataDialog('Other Key-Value Metadata', kvMetadata)"
+              v-for="item in kvMenuItems"
+              :key="item.key"
+              :title="item.label"
+              @click="openKvMetadata(item.key)"
             />
           </v-list>
         </v-menu>
@@ -139,12 +141,23 @@
       @save="loadFromUrl"
       @load-file="loadFromFile"
     />
-    <SchemaModal v-model="schemaDialogOpen" :schema="schema || []" :geo-metadata="geoMetadata" />
-    <MetadataModal
-      v-model="metadataDialogOpen"
-      :title="metadataDialogTitle"
-      :data="metadataDialogData"
+    <SchemaModal
+      v-model="schemaDialogOpen"
+      :parquet-schema="parquetSchema || []"
+      :geo-metadata="geoMetadata"
     />
+    <FileInfoModal
+      v-model="fileInfoDialogOpen"
+      :file-info="fileInfo"
+      :source="source || ''"
+      :geo-version="geoMetadata?.version || null"
+    />
+    <KvMetadataModal
+      v-model="kvMetadataDialogOpen"
+      :kv-metadata="kvMetadata"
+      :initial-key="kvMetadataInitialKey"
+    />
+    <ParquetStatsModal v-model="parquetStatsDialogOpen" :source="source || ''" />
     <AboutModal v-model="aboutDialogOpen" />
     <ConvertModal
       v-model="convertDialogOpen"
@@ -211,10 +224,14 @@ import LoadingOverlay from './components/LoadingOverlay.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
 import ConvertModal from './components/modals/ConvertModal.vue';
+import FileInfoModal from './components/modals/FileInfoModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
-import MetadataModal from './components/modals/MetadataModal.vue';
+import ParquetStatsModal from './components/modals/ParquetStatsModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
+import KvMetadataModal, {
+  FRIENDLY_NAMES as KV_FRIENDLY_NAMES
+} from './components/modals/KvMetadataModal.vue';
 
 import { startConversion } from './converter.js';
 
@@ -240,8 +257,10 @@ export default {
     LoadingOverlay,
     AboutModal,
     ConvertModal,
+    FileInfoModal,
+    KvMetadataModal,
     LoadDataModal,
-    MetadataModal,
+    ParquetStatsModal,
     QuerySettingsModal,
     SchemaModal
   },
@@ -263,7 +282,8 @@ export default {
       schema: null,
       kvMetadata: null,
       geoMetadata: null,
-      fileMetadata: null,
+      fileInfo: null,
+      parquetSchema: null,
       totalRows: -1,
 
       // Data
@@ -301,14 +321,14 @@ export default {
       // Dialog visibility
       loadDialogOpen: false,
       schemaDialogOpen: false,
-      metadataDialogOpen: false,
+      fileInfoDialogOpen: false,
+      kvMetadataDialogOpen: false,
+      parquetStatsDialogOpen: false,
       aboutDialogOpen: false,
       confirmLoadAllOpen: false,
       querySettingsOpen: false,
 
-      // Metadata dialog content (shared by KV / Geo / File metadata)
-      metadataDialogTitle: '',
-      metadataDialogData: null
+      kvMetadataInitialKey: null
     };
   },
   computed: {
@@ -443,6 +463,20 @@ export default {
       const src = this.displaySource || this.source || 'export';
       const base = src.split(/[\\/]/).pop() || 'export';
       return base.replace(/\.[^.]+$/, '') || 'export';
+    },
+    /** Menu items derived from kvMetadata keys */
+    kvMenuItems() {
+      if (!this.kvMetadata) return [];
+      const keys = Object.keys(this.kvMetadata);
+      keys.sort((a, b) => {
+        if (a === 'geo') return -1;
+        if (b === 'geo') return 1;
+        return a.localeCompare(b);
+      });
+      return keys.map((key) => ({
+        key,
+        label: KV_FRIENDLY_NAMES[key] || key
+      }));
     }
   },
   mounted() {
@@ -455,13 +489,6 @@ export default {
   },
   watch: {},
   methods: {
-    // ── Dialog helpers ─────────────────────────────────────
-    openMetadataDialog(title, data) {
-      this.metadataDialogTitle = title;
-      this.metadataDialogData = data;
-      this.metadataDialogOpen = true;
-    },
-
     // ── Status & notifications ─────────────────────────────
     setStatus(msg) {
       this.statusMessage = msg;
@@ -472,6 +499,11 @@ export default {
       const info = friendlyError(err);
       const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
       this.$snotify.error(body, info.title, { timeout: 0, closeOnClick: true });
+    },
+
+    openKvMetadata(key) {
+      this.kvMetadataInitialKey = key;
+      this.kvMetadataDialogOpen = true;
     },
 
     /**
@@ -548,7 +580,8 @@ export default {
       this.schema = null;
       this.kvMetadata = null;
       this.geoMetadata = null;
-      this.fileMetadata = null;
+      this.fileInfo = null;
+      this.parquetSchema = null;
       this.totalRows = -1;
       this.rows = [];
       this.geoArrowResults = [];
@@ -580,7 +613,8 @@ export default {
         this.totalRows = meta.totalRows;
         this.kvMetadata = meta.kvMetadata;
         this.geoMetadata = meta.geoMetadata;
-        this.fileMetadata = meta.fileMetadata;
+        this.fileInfo = meta.fileInfo;
+        this.parquetSchema = meta.parquetSchema;
         this.rowGroupSize = meta.rowGroupSize;
 
         // Pause: let the user choose columns, page size, etc.
