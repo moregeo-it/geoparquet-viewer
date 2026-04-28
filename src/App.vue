@@ -157,7 +157,6 @@
       :schema="schema || []"
       :geo-columns="geoColumns"
       :total-rows="totalRows"
-      :has-bbox-covering="hasBboxCovering"
       :defaults="querySettingsDefaults"
       @apply="applyQuerySettings"
     />
@@ -658,7 +657,6 @@ export default {
           this.spatialFilterActive ? this.viewportBounds : null,
           this.primaryGeoColumn,
           this.sourceCrsString,
-          null,
           this.bboxCoveringMeta
         );
         await this.executeQuery(0);
@@ -780,7 +778,7 @@ export default {
     // ── Viewport-driven spatial filtering ──────────────────
     onViewportChange(bbox) {
       this.viewportBounds = bbox;
-      if (!this.source) return;
+      if (!this.source || !this.hasBboxCovering) return;
       // Mark viewport as stale — user decides when to reload.
       if (this.rows.length > 0) {
         this.viewportStale = true;

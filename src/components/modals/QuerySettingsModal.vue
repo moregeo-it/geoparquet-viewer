@@ -111,7 +111,6 @@ export default {
     schema: { type: Array, default: () => [] },
     geoColumns: { type: Array, default: () => [] },
     totalRows: { type: Number, default: -1 },
-    hasBboxCovering: { type: Boolean, default: false },
     defaults: { type: Object, default: () => ({}) }
   },
   emits: ['update:modelValue', 'apply'],

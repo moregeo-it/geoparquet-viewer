@@ -374,14 +374,9 @@ export async function queryCount(
   bbox = null,
   geoColumn = null,
   sourceCrs = null,
-  alreadyGeometry = null,
   bboxCovering = null
 ) {
   const escaped = escapeSource(source);
-  let isAlreadyGeom = alreadyGeometry;
-  if (isAlreadyGeom === null && geoColumn && _spatialLoaded) {
-    isAlreadyGeom = await isGeometryType(source, geoColumn);
-  }
   // Pre-transform viewport bbox to source CRS when using covering columns.
   let effectiveBbox = bbox;
   if (bbox && bboxCovering && sourceCrs && _spatialLoaded) {
@@ -395,8 +390,6 @@ export async function queryCount(
     filters,
     effectiveBbox,
     geoColumn,
-    sourceCrs,
-    isAlreadyGeom ?? false,
     bboxCovering
   );
   const result = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')${where}`);
@@ -451,8 +444,6 @@ export async function queryData(
     filters,
     effectiveBbox,
     geoColumn,
-    sourceCrs,
-    isAlreadyGeom,
     bboxCovering
   );
 
@@ -497,14 +488,12 @@ export async function queryData(
  * columns for efficient Parquet predicate pushdown. The bbox should already be in
  * source CRS coordinates (pre-transformed by the caller).
  *
- * When bboxCovering is absent and spatial is loaded, falls back to ST_Intersects.
+ * Without bboxCovering, no spatial filtering is applied (bbox is ignored).
  */
 function buildWhereClause(
   filters,
   bbox = null,
   geoColumn = null,
-  sourceCrs = null,
-  alreadyGeometry = false,
   bboxCovering = null
 ) {
   const conditions = [];
@@ -521,32 +510,18 @@ function buildWhereClause(
     conditions.push(...fc);
   }
 
-  if (bbox && geoColumn) {
+  if (bbox && geoColumn && bboxCovering) {
     const [west, south, east, north] = bbox;
-    if (bboxCovering) {
-      // Fast path: compare directly against bbox covering columns.
-      // bbox is already in source CRS (pre-transformed by caller when needed).
-      // This allows Parquet to apply predicate pushdown on column statistics.
-      const xmin = coveringPathToSql(bboxCovering.xmin);
-      const ymin = coveringPathToSql(bboxCovering.ymin);
-      const xmax = coveringPathToSql(bboxCovering.xmax);
-      const ymax = coveringPathToSql(bboxCovering.ymax);
-      conditions.push(
-        `${xmax} >= ${west} AND ${xmin} <= ${east} AND ${ymax} >= ${south} AND ${ymin} <= ${north}`
-      );
-    } else if (_spatialLoaded) {
-      // Slow path fallback: full per-row spatial intersection.
-      const envelope = `ST_MakeEnvelope(${west}, ${south}, ${east}, ${north})`;
-      const baseExpr = geomExpr(geoColumn, alreadyGeometry);
-      if (sourceCrs) {
-        const crsLiteral = sourceCrs.replace(/'/g, "''");
-        conditions.push(
-          `ST_Intersects(${baseExpr}, ST_Transform(${envelope}, 'EPSG:4326', '${crsLiteral}', true))`
-        );
-      } else {
-        conditions.push(`ST_Intersects(${baseExpr}, ${envelope})`);
-      }
-    }
+    // Compare directly against bbox covering columns.
+    // bbox is already in source CRS (pre-transformed by caller when needed).
+    // This allows Parquet to apply predicate pushdown on column statistics.
+    const xmin = coveringPathToSql(bboxCovering.xmin);
+    const ymin = coveringPathToSql(bboxCovering.ymin);
+    const xmax = coveringPathToSql(bboxCovering.xmax);
+    const ymax = coveringPathToSql(bboxCovering.ymax);
+    conditions.push(
+      `${xmax} >= ${west} AND ${xmin} <= ${east} AND ${ymax} >= ${south} AND ${ymin} <= ${north}`
+    );
   }
 
   if (conditions.length === 0) return '';
