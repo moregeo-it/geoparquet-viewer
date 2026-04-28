@@ -4,17 +4,14 @@
     @update:model-value="$emit('update:modelValue', $event)"
     max-width="700"
   >
-    <v-card>
-      <v-card-title>Query Preferences</v-card-title>
+    <v-card class="query-settings">
+      <v-card-title>Data Loading Preferences</v-card-title>
       <v-divider />
       <v-card-text>
         <!-- File summary -->
         <div class="d-flex ga-4 mb-4 text-body-2 text-grey-darken-1">
           <span>
             <strong>{{ totalRows >= 0 ? totalRows.toLocaleString() : '?' }}</strong> rows
-          </span>
-          <span>
-            <strong>{{ availableColumns.length }}</strong> columns
           </span>
           <span v-if="geometryType">
             Geometry: <strong>{{ geometryType }}</strong>
@@ -25,9 +22,13 @@
         </div>
 
         <!-- Column picker -->
-        <h3 class="text-subtitle-2 font-weight-bold mb-1">Columns</h3>
-        <p class="text-caption text-grey-darken-1 mb-2">
-          Select which columns to load and display in the table.
+        <h3 class="text-subtitle-2 font-weight-bold mb-1">
+          Columns ({{ localSelectedColumns.length }}/{{ availableColumns.length }})
+        </h3>
+        <p class="text-caption text-grey-darken-1 my-1">
+          Select which columns to load and display in the table. This is important as GeoParquet is
+          a columnar format and more only loading the columns you need will improve load time and
+          memory usage. The primary geometry column is always loaded and not shown here.
         </p>
         <div
           class="column-picker-list"
@@ -70,7 +71,7 @@
 
         <!-- Page size -->
         <h3 class="text-subtitle-2 font-weight-bold mb-1">Rows per page</h3>
-        <p class="text-caption text-grey-darken-1 mb-2">
+        <p class="text-caption text-grey-darken-1 my-2">
           How many rows to load at a time. Smaller values load faster.
         </p>
         <v-select
@@ -85,9 +86,6 @@
         />
       </v-card-text>
       <v-card-actions>
-        <span class="text-caption text-grey ml-2">
-          {{ localSelectedColumns.length }} of {{ availableColumns.length }} columns selected
-        </span>
         <v-spacer />
         <v-btn variant="text" @click="cancel">Cancel</v-btn>
         <v-btn
@@ -140,11 +138,12 @@ export default {
 
       // Base options with descriptions for larger values
       const baseOptions = [
-        { value: 1000, title: '1,000', props: {} },
-        { value: 5000, title: '5,000', props: {} },
-        { value: 10000, title: '10,000 — default', props: {} },
-        { value: 25000, title: '25,000 — may be slow', props: {} },
-        { value: 50000, title: '50,000 — not recommended', props: {} }
+        { value: 1000, title: '1.000', props: {} },
+        { value: 5000, title: '5.000', props: {} },
+        { value: 10000, title: '10.000 — default', props: {} },
+        { value: 25000, title: '25.000 — may be slow', props: {} },
+        { value: 50000, title: '50.000 — not recommended', props: {} },
+        { value: 100000, title: '100.000 — not recommended', props: {} }
       ];
 
       // If we have a rowGroupSize and it's >= 1000, add or replace in the list
@@ -232,5 +231,12 @@ export default {
 }
 .column-picker-item .v-selection-control {
   min-height: unset;
+}
+
+.query-settings .text-caption {
+  font-size: 0.9rem;
+}
+.query-settings h3 {
+  margin-bottom: 0rem;
 }
 </style>

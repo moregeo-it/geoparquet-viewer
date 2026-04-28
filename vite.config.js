@@ -20,6 +20,10 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['@duckdb/duckdb-wasm'],
+    // See https://github.com/vitejs/vite/discussions/14801#discussioncomment-15550931 for details
+    include: [
+      'vuetify',
+    ],
   },
   build: {
     target: 'esnext',
