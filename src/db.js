@@ -386,12 +386,7 @@ export async function queryCount(
       console.warn('Failed to transform bbox for queryCount:', e.message);
     }
   }
-  const where = buildWhereClause(
-    filters,
-    effectiveBbox,
-    geoColumn,
-    bboxCovering
-  );
+  const where = buildWhereClause(filters, effectiveBbox, geoColumn, bboxCovering);
   const result = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')${where}`);
   return Number(result.toArray()[0].cnt);
 }
@@ -440,12 +435,7 @@ export async function queryData(
   }
 
   // Build WHERE clause (filters + optional viewport bbox).
-  const where = buildWhereClause(
-    filters,
-    effectiveBbox,
-    geoColumn,
-    bboxCovering
-  );
+  const where = buildWhereClause(filters, effectiveBbox, geoColumn, bboxCovering);
 
   let geoSelect = '';
   if (geoColumn && _spatialLoaded) {
@@ -490,12 +480,7 @@ export async function queryData(
  *
  * Without bboxCovering, no spatial filtering is applied (bbox is ignored).
  */
-function buildWhereClause(
-  filters,
-  bbox = null,
-  geoColumn = null,
-  bboxCovering = null
-) {
+function buildWhereClause(filters, bbox = null, geoColumn = null, bboxCovering = null) {
   const conditions = [];
 
   if (filters && filters.length > 0) {
