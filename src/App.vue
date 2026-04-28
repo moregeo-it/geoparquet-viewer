@@ -7,31 +7,17 @@
       </v-app-bar-title>
       <v-spacer />
       <v-divider vertical class="ma-2" />
-      <v-btn size="small" @click="loadDialogOpen = true" :disabled="initialLoading"
-        >Load Data</v-btn
-      >
-      <v-btn
-        v-if="source"
-        size="small"
-        @click="convertDialogOpen = true"
-        :disabled="initialLoading"
-      >
-        Convert
-      </v-btn>
+      <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
+      <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
       <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
         <v-divider vertical class="ma-2" />
         <v-btn v-if="fileInfo" size="small" @click="fileInfoDialogOpen = true"> File </v-btn>
-        <v-btn v-if="parquetSchema" size="small" @click="schemaDialogOpen = true">Structure</v-btn>
-        <v-menu v-if="kvMetadata || source">
+        <v-menu v-if="parquetSchema || source">
           <template #activator="{ props }">
-            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
+            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Structure</v-btn>
           </template>
           <v-list density="compact">
-            <v-list-item
-              v-if="kvMetadata"
-              title="KV Metadata"
-              @click="kvMetadataDialogOpen = true"
-            />
+            <v-list-item v-if="parquetSchema" title="Schema" @click="schemaDialogOpen = true" />
             <v-list-item
               v-if="source"
               title="Parquet Stats"
@@ -39,9 +25,22 @@
             />
           </v-list>
         </v-menu>
+        <v-menu v-if="kvMenuItems.length">
+          <template #activator="{ props }">
+            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
+          </template>
+          <v-list density="compact">
+            <v-list-item
+              v-for="item in kvMenuItems"
+              :key="item.key"
+              :title="item.label"
+              @click="openKvMetadata(item.key)"
+            />
+          </v-list>
+        </v-menu>
       </template>
       <v-divider vertical class="ma-2" />
-      <v-btn size="small" @click="aboutDialogOpen = true" :disabled="initialLoading">About</v-btn>
+      <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
     </v-app-bar>
 
     <v-main>
@@ -153,7 +152,11 @@
       :source="source || ''"
       :geo-version="geoMetadata?.version || null"
     />
-    <KvMetadataModal v-model="kvMetadataDialogOpen" :kv-metadata="kvMetadata" />
+    <KvMetadataModal
+      v-model="kvMetadataDialogOpen"
+      :kv-metadata="kvMetadata"
+      :initial-key="kvMetadataInitialKey"
+    />
     <ParquetStatsModal v-model="parquetStatsDialogOpen" :source="source || ''" />
     <AboutModal v-model="aboutDialogOpen" />
     <ConvertModal
@@ -222,11 +225,13 @@ import LoadingOverlay from './components/LoadingOverlay.vue';
 import AboutModal from './components/modals/AboutModal.vue';
 import ConvertModal from './components/modals/ConvertModal.vue';
 import FileInfoModal from './components/modals/FileInfoModal.vue';
-import KvMetadataModal from './components/modals/KvMetadataModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
 import ParquetStatsModal from './components/modals/ParquetStatsModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
+import KvMetadataModal, {
+  FRIENDLY_NAMES as KV_FRIENDLY_NAMES
+} from './components/modals/KvMetadataModal.vue';
 
 import { startConversion } from './converter.js';
 
@@ -321,7 +326,9 @@ export default {
       parquetStatsDialogOpen: false,
       aboutDialogOpen: false,
       confirmLoadAllOpen: false,
-      querySettingsOpen: false
+      querySettingsOpen: false,
+
+      kvMetadataInitialKey: null
     };
   },
   computed: {
@@ -456,6 +463,20 @@ export default {
       const src = this.displaySource || this.source || 'export';
       const base = src.split(/[\\/]/).pop() || 'export';
       return base.replace(/\.[^.]+$/, '') || 'export';
+    },
+    /** Menu items derived from kvMetadata keys */
+    kvMenuItems() {
+      if (!this.kvMetadata) return [];
+      const keys = Object.keys(this.kvMetadata);
+      keys.sort((a, b) => {
+        if (a === 'geo') return -1;
+        if (b === 'geo') return 1;
+        return a.localeCompare(b);
+      });
+      return keys.map((key) => ({
+        key,
+        label: KV_FRIENDLY_NAMES[key] || key
+      }));
     }
   },
   mounted() {
@@ -478,6 +499,11 @@ export default {
       const info = friendlyError(err);
       const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
       this.$snotify.error(body, info.title, { timeout: 0, closeOnClick: true });
+    },
+
+    openKvMetadata(key) {
+      this.kvMetadataInitialKey = key;
+      this.kvMetadataDialogOpen = true;
     },
 
     /**

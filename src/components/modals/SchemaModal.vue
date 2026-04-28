@@ -2,7 +2,7 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="900"
+    width="auto"
     scrollable
   >
     <v-card>
@@ -15,11 +15,15 @@
       </v-card-title>
       <v-divider />
       <v-card-text class="pa-0">
-        <v-table density="compact" class="schema-table">
+        <v-table density="compact">
           <thead>
             <tr>
-              <th>Column</th>
+              <th>ID</th>
+              <th>Column Name</th>
               <th>Type</th>
+              <th>DuckDB Type</th>
+              <th>Converted Type</th>
+              <th>Logical Type</th>
               <th>Repetition</th>
               <th>Info</th>
             </tr>
@@ -27,6 +31,7 @@
           <tbody>
             <template v-for="node in visibleNodes" :key="node.id">
               <tr :class="{ 'bg-green-lighten-5': isGeoColumn(node.name) }">
+                <td>{{ node.column_id }}</td>
                 <td>
                   <span
                     :style="{ paddingLeft: node.depth * 20 + 'px' }"
@@ -35,7 +40,7 @@
                     <v-icon
                       v-if="node.hasChildren"
                       size="small"
-                      class="mr-1 toggle-icon"
+                      class="mr-1"
                       @click="toggleNode(node.id)"
                     >
                       {{ expanded[node.id] ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
@@ -67,6 +72,15 @@
                   }}</code>
                   <code v-else-if="node.type">{{ node.type }}</code>
                   <span v-else class="text-grey">—</span>
+                </td>
+                <td>
+                  <span class="text-caption">{{ node.duckdb_type }}</span>
+                </td>
+                <td>
+                  <span class="text-caption">{{ node.converted_type || '—' }}</span>
+                </td>
+                <td>
+                  <span class="text-caption">{{ node.logical_type || '—' }}</span>
                 </td>
                 <td>
                   <span class="text-caption">{{ formatRepetition(node.repetition_type) }}</span>
@@ -130,15 +144,8 @@ export default {
           idx++;
           const numChildren = row.num_children || 0;
           const node = {
+            ...row,
             id: idx,
-            name: row.name,
-            type: row.type,
-            logical_type: row.logical_type,
-            converted_type: row.converted_type,
-            repetition_type: row.repetition_type,
-            scale: row.scale,
-            precision: row.precision,
-            field_id: row.field_id,
             depth,
             hasChildren: numChildren > 0,
             children: numChildren > 0 ? buildChildren(numChildren, depth + 1) : []
@@ -207,12 +214,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.schema-table {
-  font-size: 0.85rem;
-}
-.toggle-icon {
-  cursor: pointer;
-}
-</style>
