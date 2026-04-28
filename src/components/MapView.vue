@@ -121,7 +121,8 @@ export default {
       });
 
       // Emit viewport bounds on pan/zoom (debounced 400 ms)
-      this.map.on('moveend', () => {
+      this.map.on('moveend', (event) => {
+        if (event.automated) return;
         if (this.moveEndTimer) clearTimeout(this.moveEndTimer);
         this.moveEndTimer = setTimeout(() => this.emitViewport(), 400);
       });
@@ -262,7 +263,11 @@ export default {
         return;
       }
       try {
-        this.map.fitBounds(this.bounds, { padding: 50, maxZoom: 15, duration: 500 });
+        this.map.fitBounds(
+          this.bounds,
+          { padding: 50, maxZoom: 15, duration: 500 },
+          { automated: true }
+        );
       } catch (e) {
         console.warn('fitBounds failed:', e.message);
       }
@@ -341,7 +346,7 @@ export default {
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2;
+  z-index: 100;
   padding: 6px 16px;
   background: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-on-primary));

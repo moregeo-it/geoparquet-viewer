@@ -157,9 +157,9 @@
       :schema="schema || []"
       :geo-columns="geoColumns"
       :total-rows="totalRows"
-      :has-bbox-covering="hasBboxCovering"
       :defaults="querySettingsDefaults"
       @apply="applyQuerySettings"
+      @cancel="onQuerySettingsCancel"
     />
 
     <v-dialog v-model="confirmLoadAllOpen" max-width="420">
@@ -289,6 +289,7 @@ export default {
       viewportBounds: null,
       viewportGeneration: 0,
       viewportStale: false,
+      viewportActive: false,
 
       // UI state
       loading: false,
@@ -296,7 +297,6 @@ export default {
 
       // Query settings (user preferences applied before first query)
       selectedColumns: null,
-      spatialFilterEnabled: true,
 
       // Dialog visibility
       loadDialogOpen: false,
@@ -352,6 +352,11 @@ export default {
       const colMeta = this.geoMetadata.columns[this.primaryGeoColumn];
       return !!colMeta?.covering?.bbox;
     },
+    /** The covering.bbox object {xmin, ymin, xmax, ymax} with column paths, or null */
+    bboxCoveringMeta() {
+      if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return null;
+      return this.geoMetadata.columns[this.primaryGeoColumn]?.covering?.bbox ?? null;
+    },
     /**
      * Known geometry type for the primary column (e.g. 'point', 'polygon').
      * Derived from GeoParquet geometry_types. Returned only when all entries
@@ -386,7 +391,7 @@ export default {
     },
     /** Whether spatial viewport filtering is currently active */
     spatialFilterActive() {
-      return this.hasBboxCovering && this.spatialFilterEnabled;
+      return this.hasBboxCovering && this.viewportActive && this.viewportBounds;
     },
     /** Defaults passed to the QuerySettingsModal */
     querySettingsDefaults() {
@@ -404,7 +409,6 @@ export default {
         selectedColumns: this.selectedColumns,
         pageSize: this.pageSize,
         rowGroupSize: this.rowGroupSize,
-        spatialFilterEnabled: this.spatialFilterEnabled,
         geometryType,
         crsLabel
       };
@@ -475,24 +479,28 @@ export default {
      * Shows spinner while pending, transitions to success/error automatically.
      */
     _runTask(message, work) {
-      this.loading = true;
-      this.$snotify.async(message, () =>
-        work()
-          .then((successMsg) => {
-            this.loading = false;
-            return { body: successMsg, config: { timeout: 4000 } };
-          })
-          .catch((err) => {
-            this.loading = false;
-            console.error(err);
-            const info = friendlyError(err);
-            throw {
-              title: info.title,
-              body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
-              config: { timeout: 0, closeOnClick: true }
-            };
-          })
-      );
+      return new Promise((resolve, reject) => {
+        this.loading = true;
+        this.$snotify.async(message, () =>
+          work()
+            .then((successMsg) => {
+              this.loading = false;
+              resolve();
+              return { body: successMsg, config: { timeout: 4000 } };
+            })
+            .catch((err) => {
+              this.loading = false;
+              console.error(err);
+              const info = friendlyError(err);
+              reject(err);
+              throw {
+                title: info.title,
+                body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
+                config: { timeout: 0, closeOnClick: true }
+              };
+            })
+        );
+      });
     },
 
     // ── Data loading ──────────────────────────────────────
@@ -553,9 +561,11 @@ export default {
       this.currentOffset = 0;
       this.statusMessage = '';
       this.$snotify.clear();
+      this.viewportBounds = null;
       this.viewportStale = false;
+      this.viewportActive = false;
+      this.viewportGeneration = 0;
       this.selectedColumns = null;
-      this.spatialFilterEnabled = true;
     },
 
     async loadData() {
@@ -587,7 +597,6 @@ export default {
     applyQuerySettings(settings) {
       this.selectedColumns = settings.selectedColumns;
       this.pageSize = settings.pageSize;
-      this.spatialFilterEnabled = settings.spatialFilterEnabled;
 
       // Clear any previous data (relevant when re-opening settings)
       this.rows = [];
@@ -607,6 +616,15 @@ export default {
 
     reopenQuerySettings() {
       this.querySettingsOpen = true;
+    },
+
+    onQuerySettingsCancel() {
+      // If no data has been loaded yet (first-time open after loadData),
+      // clear everything and re-open the load dialog.
+      if (this.rows.length === 0) {
+        this.reset();
+        this.loadDialogOpen = true;
+      }
     },
 
     loadMore() {
@@ -648,7 +666,8 @@ export default {
           this.filters,
           this.spatialFilterActive ? this.viewportBounds : null,
           this.primaryGeoColumn,
-          this.sourceCrsString
+          this.sourceCrsString,
+          this.bboxCoveringMeta
         );
         await this.executeQuery(0);
         return `Filter matched ${this.filteredCount.toLocaleString()} rows. Showing ${this.loadedCount.toLocaleString()}.`;
@@ -671,6 +690,7 @@ export default {
         bbox: this.spatialFilterActive ? this.viewportBounds : null,
         sourceCrs: this.sourceCrsString,
         columns: selectColumns,
+        bboxCovering: this.bboxCoveringMeta,
         limit,
         offset
       });
@@ -768,7 +788,7 @@ export default {
     // ── Viewport-driven spatial filtering ──────────────────
     onViewportChange(bbox) {
       this.viewportBounds = bbox;
-      if (!this.source || !this.spatialFilterActive) return;
+      if (!this.source || !this.hasBboxCovering) return;
       // Mark viewport as stale — user decides when to reload.
       if (this.rows.length > 0) {
         this.viewportStale = true;
@@ -777,6 +797,7 @@ export default {
 
     reloadForViewport() {
       this.viewportStale = false;
+      this.viewportActive = true;
       const gen = ++this.viewportGeneration;
       this.rows = [];
       this.geoArrowResults = [];
@@ -787,8 +808,14 @@ export default {
 
       this._runTask('Loading data in viewport...', async () => {
         await this.executeQuery(0);
-        if (gen !== this.viewportGeneration) return '';
+        if (gen !== this.viewportGeneration) {
+          return '';
+        }
         return `Loaded ${this.loadedCount.toLocaleString()} rows in viewport.`;
+      }).finally(() => {
+        if (gen === this.viewportGeneration) {
+          this.viewportActive = false;
+        }
       });
     },
 

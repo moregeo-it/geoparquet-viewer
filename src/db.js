@@ -322,6 +322,50 @@ function blobToString(val) {
 }
 
 /**
+ * Transform a WGS84 bbox [west, south, east, north] into the given source CRS.
+ * Transforms all four corners and returns [minx, miny, maxx, maxy] in source CRS units.
+ * Requires the spatial extension to be loaded.
+ *
+ * @param {number[]} bbox - [west, south, east, north] in WGS84.
+ * @param {string} sourceCrs - PROJJSON string of the target CRS.
+ * @returns {Promise<number[]>} [minx, miny, maxx, maxy] in source CRS.
+ */
+export async function transformBbox(bbox, sourceCrs) {
+  const [west, south, east, north] = bbox;
+  const crsLiteral = sourceCrs.replace(/'/g, "''");
+  const result = await query(
+    `SELECT MIN(x) as minx, MIN(y) as miny, MAX(x) as maxx, MAX(y) as maxy FROM (
+       SELECT ST_X(ST_Transform(ST_Point(${west}, ${south}), 'EPSG:4326', '${crsLiteral}', true)) as x,
+              ST_Y(ST_Transform(ST_Point(${west}, ${south}), 'EPSG:4326', '${crsLiteral}', true)) as y
+       UNION ALL
+       SELECT ST_X(ST_Transform(ST_Point(${east}, ${south}), 'EPSG:4326', '${crsLiteral}', true)),
+              ST_Y(ST_Transform(ST_Point(${east}, ${south}), 'EPSG:4326', '${crsLiteral}', true))
+       UNION ALL
+       SELECT ST_X(ST_Transform(ST_Point(${east}, ${north}), 'EPSG:4326', '${crsLiteral}', true)),
+              ST_Y(ST_Transform(ST_Point(${east}, ${north}), 'EPSG:4326', '${crsLiteral}', true))
+       UNION ALL
+       SELECT ST_X(ST_Transform(ST_Point(${west}, ${north}), 'EPSG:4326', '${crsLiteral}', true)),
+              ST_Y(ST_Transform(ST_Point(${west}, ${north}), 'EPSG:4326', '${crsLiteral}', true))
+     )`
+  );
+  const row = result.toArray()[0];
+  return [Number(row.minx), Number(row.miny), Number(row.maxx), Number(row.maxy)];
+}
+
+/**
+ * Convert a GeoParquet covering column path array to a DuckDB SQL expression.
+ * e.g. ["bbox", "xmin"] → struct_extract("bbox", 'xmin')
+ *      ["xmin"] → "xmin"
+ */
+function coveringPathToSql(path) {
+  let expr = `"${path[0]}"`;
+  for (let i = 1; i < path.length; i++) {
+    expr = `struct_extract(${expr}, '${path[i]}')`;
+  }
+  return expr;
+}
+
+/**
  * Get the count of rows matching the given filters and optional bbox.
  */
 export async function queryCount(
@@ -330,14 +374,19 @@ export async function queryCount(
   bbox = null,
   geoColumn = null,
   sourceCrs = null,
-  alreadyGeometry = null
+  bboxCovering = null
 ) {
   const escaped = escapeSource(source);
-  let isAlreadyGeom = alreadyGeometry;
-  if (isAlreadyGeom === null && geoColumn && _spatialLoaded) {
-    isAlreadyGeom = await isGeometryType(source, geoColumn);
+  // Pre-transform viewport bbox to source CRS when using covering columns.
+  let effectiveBbox = bbox;
+  if (bbox && bboxCovering && sourceCrs && _spatialLoaded) {
+    try {
+      effectiveBbox = await transformBbox(bbox, sourceCrs);
+    } catch (e) {
+      console.warn('Failed to transform bbox for queryCount:', e.message);
+    }
   }
-  const where = buildWhereClause(filters, bbox, geoColumn, sourceCrs, isAlreadyGeom ?? false);
+  const where = buildWhereClause(filters, effectiveBbox, geoColumn, bboxCovering);
   const result = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')${where}`);
   return Number(result.toArray()[0].cnt);
 }
@@ -361,7 +410,8 @@ export async function queryData(
     limit = null,
     offset = 0,
     alreadyGeometry = null,
-    columns = null
+    columns = null,
+    bboxCovering = null
   } = {}
 ) {
   const escaped = escapeSource(source);
@@ -374,8 +424,18 @@ export async function queryData(
     isAlreadyGeom = await isGeometryType(source, geoColumn);
   }
 
+  // Pre-transform viewport bbox to source CRS when using covering columns.
+  let effectiveBbox = bbox;
+  if (bbox && bboxCovering && sourceCrs && _spatialLoaded) {
+    try {
+      effectiveBbox = await transformBbox(bbox, sourceCrs);
+    } catch (e) {
+      console.warn('Failed to transform bbox for queryData:', e.message);
+    }
+  }
+
   // Build WHERE clause (filters + optional viewport bbox).
-  const where = buildWhereClause(filters, bbox, geoColumn, sourceCrs, isAlreadyGeom);
+  const where = buildWhereClause(filters, effectiveBbox, geoColumn, bboxCovering);
 
   let geoSelect = '';
   if (geoColumn && _spatialLoaded) {
@@ -413,14 +473,14 @@ export async function queryData(
 
 /**
  * Build a SQL WHERE clause from user filters + optional viewport bbox.
+ *
+ * When bboxCovering is provided, uses direct column comparisons on the covering bbox
+ * columns for efficient Parquet predicate pushdown. The bbox should already be in
+ * source CRS coordinates (pre-transformed by the caller).
+ *
+ * Without bboxCovering, no spatial filtering is applied (bbox is ignored).
  */
-function buildWhereClause(
-  filters,
-  bbox = null,
-  geoColumn = null,
-  sourceCrs = null,
-  alreadyGeometry = false
-) {
+function buildWhereClause(filters, bbox = null, geoColumn = null, bboxCovering = null) {
   const conditions = [];
 
   if (filters && filters.length > 0) {
@@ -435,19 +495,18 @@ function buildWhereClause(
     conditions.push(...fc);
   }
 
-  // Spatial viewport bbox filter — only when spatial extension is loaded.
-  if (bbox && geoColumn && _spatialLoaded) {
+  if (bbox && geoColumn && bboxCovering) {
     const [west, south, east, north] = bbox;
-    const envelope = `ST_MakeEnvelope(${west}, ${south}, ${east}, ${north})`;
-    const baseExpr = geomExpr(geoColumn, alreadyGeometry);
-    if (sourceCrs) {
-      const crsLiteral = sourceCrs.replace(/'/g, "''");
-      conditions.push(
-        `ST_Intersects(${baseExpr}, ST_Transform(${envelope}, 'EPSG:4326', '${crsLiteral}', true))`
-      );
-    } else {
-      conditions.push(`ST_Intersects(${baseExpr}, ${envelope})`);
-    }
+    // Compare directly against bbox covering columns.
+    // bbox is already in source CRS (pre-transformed by caller when needed).
+    // This allows Parquet to apply predicate pushdown on column statistics.
+    const xmin = coveringPathToSql(bboxCovering.xmin);
+    const ymin = coveringPathToSql(bboxCovering.ymin);
+    const xmax = coveringPathToSql(bboxCovering.xmax);
+    const ymax = coveringPathToSql(bboxCovering.ymax);
+    conditions.push(
+      `${xmax} >= ${west} AND ${xmin} <= ${east} AND ${ymax} >= ${south} AND ${ymin} <= ${north}`
+    );
   }
 
   if (conditions.length === 0) return '';
