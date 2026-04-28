@@ -31,6 +31,7 @@
                 v-if="entry.isJson"
                 :data="entry.parsed"
                 :deep="1"
+                :show-icon="true"
                 :show-line="false"
               />
               <div v-else>{{ entry.value }}</div>
