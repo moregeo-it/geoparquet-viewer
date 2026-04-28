@@ -563,6 +563,8 @@ export default {
       this.$snotify.clear();
       this.viewportBounds = null;
       this.viewportStale = false;
+      this.viewportActive = false;
+      this.viewportGeneration = 0;
       this.selectedColumns = null;
     },
 
