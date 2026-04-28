@@ -227,7 +227,7 @@ export async function getRowCount(source) {
  *
  * @param {string} source - Parquet source path.
  * @param {Function} onProgress - Status callback.
- * @returns {Promise<{schema, totalRows, rowGroupSize, kvMetadata, geoMetadata, fileMetadata}>}
+ * @returns {Promise<{schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema}>}
  */
 export async function bootstrapMetadata(source, onProgress = () => {}) {
   const escaped = escapeSource(source);
@@ -242,23 +242,24 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   }));
   cacheSchemaGeomTypes(source, schema);
 
-  // 2. Row count + row group size (footer now cached from step 1)
-  onProgress('Reading parquet stats...');
+  // 2. File-level metadata (num_rows, num_row_groups, format_version, etc.)
+  onProgress('Reading file metadata...');
+  let fileInfo = null;
   let totalRows = -1;
   let rowGroupSize = null;
   try {
-    const statsResult = await query(
-      `SELECT SUM(row_group_num_rows) AS total_rows,
-              FIRST(row_group_num_rows) AS first_rg_size
-       FROM (SELECT DISTINCT row_group_id, row_group_num_rows
-             FROM parquet_metadata('${escaped}'))`
-    );
-    const statsRow = statsResult.toArray()[0];
-    totalRows = Number(statsRow.total_rows);
-    const rgSize = Number(statsRow.first_rg_size);
-    rowGroupSize = rgSize > 0 ? rgSize : null;
+    const fileResult = await query(`SELECT * FROM parquet_file_metadata('${escaped}')`);
+    const row = fileResult.toArray()[0];
+    fileInfo = {};
+    for (const field of fileResult.schema.fields) {
+      const v = row[field.name];
+      fileInfo[field.name] = typeof v === 'bigint' ? Number(v) : v;
+    }
+    totalRows = fileInfo.num_rows ?? -1;
+    const numGroups = fileInfo.num_row_groups ?? 0;
+    rowGroupSize = numGroups > 0 ? Math.ceil(totalRows / numGroups) : null;
   } catch (e) {
-    console.warn('parquet_metadata failed, falling back to COUNT(*):', e.message);
+    console.warn('parquet_file_metadata failed, falling back to COUNT(*):', e.message);
     try {
       const countResult = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
       totalRows = Number(countResult.toArray()[0].cnt);
@@ -291,23 +292,25 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     console.warn('Could not read KV metadata:', e.message);
   }
 
-  // 4. File-level schema metadata (parquet_schema)
-  let fileMetadata = null;
+  // 4. Parquet internal schema (tree structure with num_children)
+  onProgress('Reading parquet schema...');
+  let parquetSchema = null;
   try {
-    const fileResult = await query(`SELECT * FROM parquet_schema('${escaped}')`);
-    fileMetadata = fileResult.toArray().map((row) => {
+    const schemaFileResult = await query(`SELECT * FROM parquet_schema('${escaped}')`);
+    parquetSchema = schemaFileResult.toArray().map((row) => {
       const obj = {};
-      for (const field of fileResult.schema.fields) {
+      for (const field of schemaFileResult.schema.fields) {
+        if (field.name === 'file_name') continue;
         const v = row[field.name];
         obj[field.name] = typeof v === 'bigint' ? Number(v) : v;
       }
       return obj;
     });
   } catch (e) {
-    console.warn('Could not read file metadata:', e.message);
+    console.warn('Could not read parquet schema:', e.message);
   }
 
-  return { schema, totalRows, rowGroupSize, kvMetadata, geoMetadata, fileMetadata };
+  return { schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema };
 }
 
 /**
@@ -319,6 +322,33 @@ function blobToString(val) {
     return new TextDecoder().decode(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
   if (val instanceof ArrayBuffer) return new TextDecoder().decode(val);
   return String(val);
+}
+
+/**
+ * Query per-column, per-row-group Parquet metadata (lazy — can be large).
+ * Used by the Parquet Column Stats modal.
+ *
+ * @param {string} source - Parquet source path.
+ * @returns {Promise<Array>} Array of row objects from parquet_metadata().
+ */
+export async function queryParquetStats(source) {
+  const escaped = escapeSource(source);
+  const result = await query(
+    `SELECT row_group_id, row_group_num_rows, column_id, path_in_schema,
+            type, compression, encodings, num_values,
+            stats_min_value, stats_max_value, stats_null_count,
+            total_compressed_size, total_uncompressed_size
+     FROM parquet_metadata('${escaped}')
+     ORDER BY row_group_id, column_id`
+  );
+  return result.toArray().map((row) => {
+    const obj = {};
+    for (const field of result.schema.fields) {
+      const v = row[field.name];
+      obj[field.name] = typeof v === 'bigint' ? Number(v) : v;
+    }
+    return obj;
+  });
 }
 
 /**
