@@ -159,6 +159,7 @@
       :total-rows="totalRows"
       :defaults="querySettingsDefaults"
       @apply="applyQuerySettings"
+      @cancel="onQuerySettingsCancel"
     />
 
     <v-dialog v-model="confirmLoadAllOpen" max-width="420">
@@ -615,6 +616,15 @@ export default {
 
     reopenQuerySettings() {
       this.querySettingsOpen = true;
+    },
+
+    onQuerySettingsCancel() {
+      // If no data has been loaded yet (first-time open after loadData),
+      // clear everything and re-open the load dialog.
+      if (this.rows.length === 0) {
+        this.reset();
+        this.loadDialogOpen = true;
+      }
     },
 
     loadMore() {

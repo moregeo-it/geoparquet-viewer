@@ -89,7 +89,7 @@
           {{ localSelectedColumns.length }} of {{ availableColumns.length }} columns selected
         </span>
         <v-spacer />
-        <v-btn variant="text" @click="$emit('update:modelValue', false)">Cancel</v-btn>
+        <v-btn variant="text" @click="cancel">Cancel</v-btn>
         <v-btn
           color="primary"
           variant="flat"
@@ -113,7 +113,7 @@ export default {
     totalRows: { type: Number, default: -1 },
     defaults: { type: Object, default: () => ({}) }
   },
-  emits: ['update:modelValue', 'apply'],
+  emits: ['update:modelValue', 'apply', 'cancel'],
   data() {
     return {
       localSelectedColumns: [],
@@ -208,6 +208,10 @@ export default {
         pageSize: this.localPageSize
       });
       this.$emit('update:modelValue', false);
+    },
+    cancel() {
+      this.$emit('update:modelValue', false);
+      this.$emit('cancel');
     }
   }
 };
