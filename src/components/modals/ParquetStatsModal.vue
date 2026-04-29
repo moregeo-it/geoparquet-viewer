@@ -2,8 +2,8 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="35%"
-    max-height="80%"
+    width="90%"
+    height="90%"
     scrollable
   >
     <v-card>
@@ -23,8 +23,8 @@
         {{ error }}
       </v-card-text>
       <v-card-text v-else class="pa-0">
-        <v-expansion-panels variant="accordion">
-          <v-expansion-panel v-for="group in rowGroups" :key="group.id">
+        <v-expansion-panels v-model="openPanel" variant="accordion">
+          <v-expansion-panel v-for="(group, i) in rowGroups" :key="group.id" :value="i">
             <v-expansion-panel-title>
               <strong>Row Group {{ group.id }}</strong>
               <span class="ml-2 text-caption text-grey">
@@ -32,7 +32,7 @@
               </span>
             </v-expansion-panel-title>
             <v-expansion-panel-text>
-              <v-table density="compact" class="stats-table">
+              <v-table v-if="openPanel === i" density="compact" class="stats-table">
                 <thead>
                   <tr>
                     <th>Column</th>
@@ -75,6 +75,7 @@
 </template>
 
 <script>
+import { markRaw } from 'vue';
 import { queryParquetStats } from '../../db';
 
 export default {
@@ -88,7 +89,8 @@ export default {
     return {
       loading: false,
       error: null,
-      stats: null
+      stats: null,
+      openPanel: null
     };
   },
   computed: {
@@ -117,7 +119,7 @@ export default {
       this.loading = true;
       this.error = null;
       try {
-        this.stats = await queryParquetStats(this.source);
+        this.stats = markRaw(await queryParquetStats(this.source));
       } catch (e) {
         this.error = `Failed to load column statistics: ${e.message}`;
       } finally {

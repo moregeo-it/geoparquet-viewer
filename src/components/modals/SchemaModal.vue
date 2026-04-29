@@ -2,8 +2,8 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="35%"
-    max-height="80%"
+    width="90%"
+    height="90%"
     scrollable
   >
     <v-card>

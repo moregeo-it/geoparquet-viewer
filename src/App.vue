@@ -20,7 +20,7 @@
             <v-list-item v-if="parquetSchema" title="Schema" @click="schemaDialogOpen = true" />
             <v-list-item
               v-if="source"
-              title="Parquet Stats"
+              title="Row Groups / Statistics"
               @click="parquetStatsDialogOpen = true"
             />
           </v-list>
@@ -175,12 +175,12 @@
       @cancel="onQuerySettingsCancel"
     />
 
-    <v-dialog v-model="confirmLoadAllOpen" max-width="25%">
+    <v-dialog v-model="confirmLoadAllOpen" width="auto">
       <v-card>
         <v-card-title class="text-h6">Loading all remaining data?</v-card-title>
         <v-card-text class="text-body-2">
-          There are <strong>{{ remainingRows.toLocaleString() }}</strong> rows left to load. This
-          may take a while and could use significant memory.
+          There are <strong>{{ remainingRows.toLocaleString() }}</strong> rows left to load.<br />This
+          may take a while or even fail and could use significant memory.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -234,6 +234,7 @@ import KvMetadataModal, {
 } from './components/modals/KvMetadataModal.vue';
 
 import { startConversion } from './converter.js';
+import { shallowRef } from 'vue';
 
 const DEFAULT_PAGE_SIZE = 10000;
 
@@ -287,8 +288,8 @@ export default {
       totalRows: -1,
 
       // Data
-      rows: [],
-      geoArrowResults: [],
+      rows: shallowRef([]),
+      geoArrowResults: shallowRef([]),
       mapBounds: null,
       wkbByIndex: {},
 
@@ -772,13 +773,13 @@ export default {
         }
       }
 
-      this.rows.push(...newRows);
+      this.rows = this.rows.concat(newRows);
 
       if (mapWkbArrays.length > 0) {
         const attributes = new Map([['__index', { values: mapIndices, type: 'BIGINT' }]]);
         const geoArrowResults = buildGeoArrowTables(mapWkbArrays, attributes, this.knownGeomType);
 
-        this.geoArrowResults = [...this.geoArrowResults, ...geoArrowResults];
+        this.geoArrowResults = this.geoArrowResults.concat(geoArrowResults);
         Object.assign(this.wkbByIndex, newWkbByIndex);
       }
 

@@ -66,25 +66,30 @@ export default {
       newUrl: '',
       selectedFile: null,
       exampleList: [
+        // tiny < 5 MB, small < 50 MB, medium < 200 MB, large < 1 GB, very large >= 1 GB
         {
           url: 'https://raw.githubusercontent.com/visgl/loaders.gl/master/modules/parquet/test/data/geoparquet/airports.parquet',
-          title: 'Airports (small, points)'
+          title: 'Airports (< 1 MB, points)'
         },
         {
           url: 'https://data.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
-          title: 'Energy performance certificates Wolverhampton (medium, polygons)'
+          title: 'Energy performance certificates in Wolverhampton, UK (2 MB, polygons)'
         },
         {
-          url: 'https://data.source.coop/fiboa/ai4sf/ai4sf.parquet',
-          title: 'Field boundaries Cambodia/Vietnam (medium, polygons)'
+          url: 'https://data.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
+          title: 'Field boundaries for North Rhine-Westphalia, Germany (254 MB, polygons)'
         },
         {
-          url: 'https://data.source.coop/fiboa/de-bb/dfbk.parquet',
-          title: 'Building footprints Berlin / Brandenburg (large, polygons)'
+          url: 'https://data.source.coop/henryspatialanalysis/openpois/latest/osm-parquet/primary_tag=leisure/part-0.parquet',
+          title: 'Open POIs with leisure tag in the US (430 MB, points)'
         },
         {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/japan/japan.parquet',
-          title: 'Field boundaries for Japan (very large, polygons)'
+          url: 'https://data.source.coop/fiboa/japan/japan.parquet',
+          title: 'Field boundaries for Japan (4.5 GB, polygons)'
+        },
+        {
+          url: 'https://data.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IND/IND.parquet',
+          title: 'Open buildings in India (60 GB, polygons)'
         }
       ]
     };
