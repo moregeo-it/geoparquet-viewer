@@ -9,7 +9,7 @@
       <v-card-title class="d-flex align-center">
         File Info
         <v-spacer />
-        <v-btn icon size="small" variant="text" @click="$emit('update:modelValue', false)">
+        <v-btn icon size="small" variant="variant" @click="$emit('update:modelValue', false)">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -21,9 +21,7 @@
               <td class="font-weight-bold text-no-wrap">Source</td>
               <td>
                 <span class="text-body-2 source-url">{{ source }}</span>
-                <v-btn icon size="small" variant="text" class="ml-1" @click="copySource">
-                  <v-icon size="small">mdi-content-copy</v-icon>
-                </v-btn>
+                <CopyButton :copy-text="source" size="small" density="comfortable" class="ml-3" />
               </td>
             </tr>
             <tr v-if="fileSize">
@@ -66,8 +64,11 @@
 </template>
 
 <script>
+import CopyButton from '../CopyButton.vue';
+
 export default {
   name: 'FileInfoModal',
+  components: { CopyButton },
   props: {
     modelValue: { type: Boolean, default: false },
     fileInfo: { type: Object, default: null },
@@ -93,13 +94,6 @@ export default {
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
       if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
       return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-    },
-    async copySource() {
-      try {
-        await navigator.clipboard.writeText(this.source);
-      } catch {
-        /* clipboard API may not be available */
-      }
     }
   }
 };

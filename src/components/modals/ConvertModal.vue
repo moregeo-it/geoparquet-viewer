@@ -2,14 +2,15 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="520"
+    width="auto"
   >
     <v-card>
       <v-card-title>Convert &amp; Download</v-card-title>
       <v-card-text>
         <p class="text-body-2 mb-3">
-          Convert the currently loaded file to another format. The full file is converted in a
-          background worker, which may take a while.
+          Convert the currently loaded file to another format.<br />The full file is converted in a
+          background worker, which may take a while.<br />
+          Large files (100+ MB) may fail to convert due to browser memory limitations.
         </p>
         <v-radio-group v-model="format" hide-details density="compact">
           <v-radio

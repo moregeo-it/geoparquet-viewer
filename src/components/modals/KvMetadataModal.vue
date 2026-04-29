@@ -2,7 +2,10 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="750"
+    min-width="480"
+    width="50%"
+    max-width="90%"
+    height="90%"
     scrollable
   >
     <v-card>
@@ -22,7 +25,8 @@
           <vue-json-pretty
             v-if="entry.isJson"
             :data="entry.parsed"
-            :deep="1"
+            :collapsedNodeLength="10"
+            :deep="3"
             :show-icon="true"
             :show-line="false"
           />
@@ -52,6 +56,7 @@ export const FRIENDLY_NAMES = {
   'ARROW:schema': 'Arrow Schema',
   pandas: 'Pandas',
   fiboa: 'fiboa',
+  collection: 'Vecorel Collection',
   'org.apache.spark.sql.parquet.row.metadata': 'Spark Row Metadata'
 };
 
