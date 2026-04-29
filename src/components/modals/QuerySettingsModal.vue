@@ -2,7 +2,7 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="700"
+    max-width="35%"
   >
     <v-card class="query-settings">
       <v-card-title>Data Loading Preferences</v-card-title>

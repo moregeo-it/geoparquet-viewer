@@ -2,7 +2,7 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    max-width="520"
+    max-width="28%"
   >
     <v-card>
       <v-card-title>Convert &amp; Download</v-card-title>

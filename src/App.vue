@@ -175,7 +175,7 @@
       @cancel="onQuerySettingsCancel"
     />
 
-    <v-dialog v-model="confirmLoadAllOpen" max-width="420">
+    <v-dialog v-model="confirmLoadAllOpen" max-width="25%">
       <v-card>
         <v-card-title class="text-h6">Loading all remaining data?</v-card-title>
         <v-card-text class="text-body-2">
