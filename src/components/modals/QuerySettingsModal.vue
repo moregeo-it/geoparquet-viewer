@@ -136,36 +136,29 @@ export default {
     },
     /** Build page size options dynamically based on rowGroupSize */
     pageSizeOptions() {
-      const rgs = this.defaults.rowGroupSize;
+      const rgs = this.defaults.rowGroupSize ?? null;
 
-      // Base options with descriptions for larger values
-      const baseOptions = [
-        { value: 1000, title: '1.000', props: {} },
-        { value: 5000, title: '5.000', props: {} },
-        { value: 10000, title: '10.000 — default', props: {} },
-        { value: 25000, title: '25.000 — may be slow', props: {} },
-        { value: 50000, title: '50.000 — not recommended', props: {} },
-        { value: 100000, title: '100.000 — not recommended', props: {} }
-      ];
+      const baseValues = [1000, 5000, 10000, 25000, 50000, 100000];
 
-      // If we have a rowGroupSize and it's >= 1000, add or replace in the list
-      if (rgs && rgs >= 1000) {
-        const existing = baseOptions.find((o) => o.value === rgs);
-        if (existing) {
-          // Row group size matches an existing option — annotate it
-          existing.title = `${rgs.toLocaleString()} — row group size`;
-        } else {
-          // Insert row group size as a new option in sorted position
-          baseOptions.push({
-            value: rgs,
-            title: `${rgs.toLocaleString()} — row group size`,
-            props: {}
-          });
-          baseOptions.sort((a, b) => a.value - b.value);
+      // Inject rowGroupSize as its own option if it isn't already in the list
+      const values = baseValues.includes(rgs) ? baseValues : [...baseValues, rgs].filter(Boolean);
+      values.sort((a, b) => a - b);
+
+      return values.map((value) => {
+        const parts = [value.toLocaleString()]; //
+
+        if (value === this.defaults.pageSize) {
+          parts.push('default');
         }
-      }
+        if (value === rgs) {
+          parts.push('row group size');
+        }
+        if (rgs !== null && value > rgs) {
+          parts.push('might be slow');
+        }
 
-      return baseOptions;
+        return { value, title: parts.join(' — ') };
+      });
     }
   },
   watch: {
