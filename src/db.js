@@ -242,11 +242,23 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   }));
   cacheSchemaGeomTypes(source, schema);
 
+  // Attempt to get row group size from parquet_metadata() for better pagination defaults.
+  let rowGroupSize = null;
+  try {
+    const statsResult = await query(
+      `SELECT FIRST(row_group_num_rows) AS first_rg_size FROM parquet_metadata('${escaped}') LiMIT 1`
+    );
+    const statsRow = statsResult.toArray()[0];
+    const rgSize = Number(statsRow.first_rg_size);
+    rowGroupSize = rgSize > 0 ? rgSize : null;
+  } catch (e) {
+    console.warn('Could not read row group size:', e.message);
+  }
+
   // 2. File-level metadata (num_rows, num_row_groups, format_version, etc.)
   onProgress('Reading file metadata...');
   let fileInfo = null;
   let totalRows = -1;
-  let rowGroupSize = null;
   try {
     const fileResult = await query(`SELECT * FROM parquet_file_metadata('${escaped}')`);
     const row = fileResult.toArray()[0];
@@ -256,8 +268,6 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
       fileInfo[field.name] = typeof v === 'bigint' ? Number(v) : v;
     }
     totalRows = fileInfo.num_rows ?? -1;
-    const numGroups = fileInfo.num_row_groups ?? 0;
-    rowGroupSize = numGroups > 0 ? Math.ceil(totalRows / numGroups) : null;
   } catch (e) {
     console.warn('parquet_file_metadata failed, falling back to COUNT(*):', e.message);
     try {
