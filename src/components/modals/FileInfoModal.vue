@@ -9,7 +9,7 @@
       <v-card-title class="d-flex align-center">
         File Info
         <v-spacer />
-        <v-btn icon size="small" variant="variant" @click="$emit('update:modelValue', false)">
+        <v-btn icon size="small" variant="text" @click="$emit('update:modelValue', false)">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -21,7 +21,13 @@
               <td class="font-weight-bold text-no-wrap">Source</td>
               <td>
                 <span class="text-body-2 source-url">{{ source }}</span>
-                <CopyButton :copy-text="source" size="small" density="comfortable" class="ml-3" />
+                <CopyButton
+                  :copy-text="source"
+                  size="small"
+                  density="comfortable"
+                  variant="text"
+                  class="ml-1"
+                />
               </td>
             </tr>
             <tr v-if="fileSize">

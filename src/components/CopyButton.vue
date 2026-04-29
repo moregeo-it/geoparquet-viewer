@@ -4,6 +4,7 @@
     :color="copyColor"
     :size="size"
     :density="density"
+    :variant="variant"
     :title="buttonTitle"
     :aria-label="buttonTitle"
     :disabled="resolvedDisabled"
