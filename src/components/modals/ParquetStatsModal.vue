@@ -3,11 +3,12 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     max-width="900"
+    max-height="700"
     scrollable
   >
     <v-card>
       <v-card-title class="d-flex align-center">
-        Statistics
+        Row Groups / Statistics
         <v-spacer />
         <v-btn icon size="small" variant="text" @click="$emit('update:modelValue', false)">
           <v-icon>mdi-close</v-icon>

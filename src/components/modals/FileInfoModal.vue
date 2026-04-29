@@ -97,8 +97,10 @@ export default {
     async copySource() {
       try {
         await navigator.clipboard.writeText(this.source);
+        this.$snotify.info('Source copied to clipboard', { timeout: 1000 });
       } catch {
         /* clipboard API may not be available */
+        this.$snotify.error('Failed to copy source', { timeout: 1000 });
       }
     }
   }

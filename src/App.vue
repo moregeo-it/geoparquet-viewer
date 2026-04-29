@@ -67,7 +67,7 @@
               :loading="loading"
               @select="onTableSelect"
             />
-            <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1ee-variant">
+            <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2">
               <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
                 Load more ({{ pageSize.toLocaleString() }} rows)
               </v-btn>
@@ -78,7 +78,7 @@
                 @click="confirmLoadAllIfLarge"
                 :disabled="loading"
               >
-                Load all remaining
+                Load all remaining ({{ remainingRows.toLocaleString() }} rows)
               </v-btn>
             </div>
           </div>
@@ -956,6 +956,9 @@ export default {
 
 <style>
 /* Snotify toast sizing */
+.snotifyToast {
+  margin-bottom: 2em;
+}
 .snotifyToast__title {
   font-size: 1.3em;
 }

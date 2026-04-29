@@ -3,6 +3,7 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     max-width="750"
+    max-height="700"
     scrollable
   >
     <v-card>
