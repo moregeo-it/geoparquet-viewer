@@ -28,9 +28,9 @@
           Columns ({{ localSelectedColumns.length }}/{{ availableColumns.length }})
         </h3>
         <p class="text-caption text-grey-darken-1 my-1">
-          Select which columns to load and display in the table. This is important as GeoParquet is
-          a columnar format and more only loading the columns you need will improve load time and
-          memory usage. The primary geometry column is always loaded and not shown here.
+          Select which columns to load and display. This is important as GeoParquet is a columnar
+          format and only loading the columns you need will improve load time and memory usage. The
+          primary geometry column is always loaded.
         </p>
         <div
           class="column-picker-list"
@@ -54,38 +54,39 @@
         </div>
         <div class="d-flex ga-2 mt-2">
           <v-btn
-            size="medium"
+            size="small"
             variant="text"
             v-if="localSelectedColumns.length < availableColumns.length"
             @click="selectAllColumns"
             >Select all</v-btn
           >
           <v-btn
-            size="medium"
+            size="small"
             variant="text"
             v-if="localSelectedColumns.length > 0"
             @click="deselectAllColumns"
             >Deselect all</v-btn
           >
         </div>
+        <template v-if="pageSizeOptions.length > 1">
+          <v-divider class="my-4" />
 
-        <v-divider class="my-4" />
-
-        <!-- Page size -->
-        <h3 class="text-subtitle-2 font-weight-bold mb-1">Rows per page</h3>
-        <p class="text-caption text-grey-darken-1 my-2">
-          How many rows to load at a time. Smaller values load faster.
-        </p>
-        <v-select
-          v-model="localPageSize"
-          :items="pageSizeOptions"
-          item-title="title"
-          item-value="value"
-          density="compact"
-          variant="outlined"
-          hide-details
-          style="max-width: 280px"
-        />
+          <!-- Page size -->
+          <h3 class="text-subtitle-2 font-weight-bold mb-1">Rows per page</h3>
+          <p class="text-caption text-grey-darken-1 my-2">
+            How many rows to load at a time. Smaller values load faster.
+          </p>
+          <v-select
+            v-model="localPageSize"
+            :items="pageSizeOptions"
+            item-title="title"
+            item-value="value"
+            density="compact"
+            variant="outlined"
+            hide-details
+            style="max-width: 280px"
+          />
+        </template>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -117,7 +118,7 @@ export default {
   data() {
     return {
       localSelectedColumns: [],
-      localPageSize: 10000
+      localPageSize: null
     };
   },
   computed: {
@@ -135,10 +136,26 @@ export default {
       return this.defaults.crsLabel || null;
     },
     /** Build page size options dynamically based on rowGroupSize */
+    defaultPageSize() {
+      return Math.min(this.defaults.pageSize, this.totalRows);
+    },
     pageSizeOptions() {
       const rgs = this.defaults.rowGroupSize ?? null;
 
-      const baseValues = [1000, 5000, 10000, 25000, 50000, 100000];
+      const baseValues = Array.from(
+        new Set([
+          1000,
+          5000,
+          10000,
+          25000,
+          50000,
+          100000,
+          this.defaults.rowGroupSize,
+          this.totalRows
+        ])
+      )
+        .filter((x) => typeof x === 'number' && x > 0 && x < this.totalRows && x < 1000000)
+        .sort((a, b) => a - b);
 
       // Inject rowGroupSize as its own option if it isn't already in the list
       const values = baseValues.includes(rgs) ? baseValues : [...baseValues, rgs].filter(Boolean);
@@ -154,7 +171,7 @@ export default {
           parts.push('row group size');
         }
         if (rgs !== null && value > rgs) {
-          parts.push('might be slow');
+          parts.push('may load slower');
         }
 
         return { value, title: parts.join(' — ') };
@@ -179,7 +196,17 @@ export default {
         this.localSelectedColumns = [];
       }
 
-      this.localPageSize = d.pageSize || 10000;
+      const match = this.pageSizeOptions.find((o) => o.value === this.defaultPageSize);
+      if (match) {
+        this.localPageSize = this.defaultPageSize;
+      } else {
+        // Pick the largest option that doesn't exceed the target, or the smallest available
+        const below = this.pageSizeOptions.filter((o) => o.value <= this.defaultPageSize);
+        this.localPageSize =
+          below.length > 0
+            ? below[below.length - 1].value
+            : (this.pageSizeOptions[0]?.value ?? this.defaultPageSize);
+      }
     },
     selectAllColumns() {
       this.localSelectedColumns = this.availableColumns.map((c) => c.name);
