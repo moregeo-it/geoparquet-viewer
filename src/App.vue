@@ -43,8 +43,8 @@
         </template>
         <v-divider vertical class="ma-2" />
         <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
-        <v-btn size="small" @click="handleExternalLinks('imprint')">Imprint</v-btn>
-        <v-btn size="small" @click="handleExternalLinks('privacy')">Privacy</v-btn>
+        <v-btn size="small" :href="imprintUrl" target="_blank">Imprint</v-btn>
+        <v-btn size="small" :href="privacyPolicyUrl" target="_blank">Privacy</v-btn>
       </template>
 
       <v-menu v-else>
@@ -79,8 +79,8 @@
           </template>
           <v-divider class="my-2" />
           <v-list-item @click="aboutDialogOpen = true" title="About" />
-          <v-list-item @click="handleExternalLinks('imprint')" title="Imprint" />
-          <v-list-item @click="handleExternalLinks('privacy')" title="Privacy Policy" />
+          <v-list-item :href="imprintUrl" target="_blank" title="Imprint" />
+          <v-list-item :href="privacyPolicyUrl" target="_blank" title="Privacy Policy" />
         </v-list>
       </v-menu>
     </v-app-bar>
@@ -261,7 +261,7 @@ import {
   toBinary,
   findGeoColumn
 } from '@walkthru-earth/objex-utils';
-import { friendlyError, navigateToExternalLinks } from './utils.js';
+import { friendlyError } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -361,6 +361,10 @@ export default {
       // UI state
       loading: false,
       statusMessage: '',
+
+      // External links
+      imprintUrl: 'https://moregeo.it/imprint',
+      privacyPolicyUrl: 'https://moregeo.it/privacy',
 
       // Query settings (user preferences applied before first query)
       selectedColumns: null,
@@ -555,10 +559,6 @@ export default {
       const info = friendlyError(err);
       const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
       this.$snotify.error(body, info.title, { timeout: 0, closeOnClick: true });
-    },
-
-    handleExternalLinks(type) {
-      navigateToExternalLinks(type);
     },
 
     openKvMetadata(key) {

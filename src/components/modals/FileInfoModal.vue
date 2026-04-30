@@ -56,7 +56,7 @@
             </tr>
             <tr v-if="fileInfo?.created_by">
               <td class="font-weight-bold text-no-wrap">Created By</td>
-              <td class="text-body-2">{{ fileInfo.created_by }}</td>
+              <td>{{ fileInfo.created_by }}</td>
             </tr>
             <tr v-if="footerSize">
               <td class="font-weight-bold text-no-wrap">Footer Size</td>
