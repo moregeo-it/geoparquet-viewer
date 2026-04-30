@@ -6,43 +6,91 @@
         <v-chip size="x-small" color="warning" class="ml-1 mb-1">experimental</v-chip>
       </v-app-bar-title>
       <v-spacer />
-      <v-divider vertical class="ma-2" />
-      <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
-      <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
-      <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
+
+      <template v-if="!isMobile">
         <v-divider vertical class="ma-2" />
-        <v-btn v-if="fileInfo" size="small" @click="fileInfoDialogOpen = true"> File </v-btn>
-        <v-menu v-if="parquetSchema || source">
-          <template #activator="{ props }">
-            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Structure</v-btn>
-          </template>
-          <v-list density="compact">
-            <v-list-item v-if="parquetSchema" title="Schema" @click="schemaDialogOpen = true" />
+        <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
+        <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
+        <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
+            <v-divider vertical class="ma-2" />
+          <v-btn v-if="fileInfo" size="small" @click="fileInfoDialogOpen = true"> File </v-btn>
+          <v-menu v-if="parquetSchema || source">
+            <template #activator="{ props }">
+              <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Structure</v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item v-if="parquetSchema" title="Schema" @click="schemaDialogOpen = true" />
+              <v-list-item
+                v-if="source"
+                title="Row Groups / Statistics"
+                @click="parquetStatsDialogOpen = true"
+              />
+            </v-list>
+          </v-menu>
+          <v-menu v-if="kvMenuItems.length">
+            <template #activator="{ props }">
+              <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item
+                v-for="item in kvMenuItems"
+                :key="item.key"
+                :title="item.label"
+                @click="openKvMetadata(item.key)"
+              />
+            </v-list>
+          </v-menu>
+        </template>
+        <v-divider vertical class="ma-2" />
+        <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
+        <v-btn size="small" @click="handleExternalLinks('imprint')">Imprint</v-btn>
+        <v-btn size="small" @click="handleExternalLinks('privacy')">Privacy</v-btn>
+      </template>
+
+      <v-menu v-else>
+        <template #activator="{ props }">
+           <v-app-bar-nav-icon v-bind="props" />
+        </template>
+        <v-list density="compact">
+          <v-list-item @click="loadDialogOpen = true" title="Load Data" />
+          <v-list-item v-if="source" @click="convertDialogOpen = true" title="Convert" />
+          <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
+            <v-divider />
+            <v-list-item
+              v-if="fileInfo"
+              @click="fileInfoDialogOpen = true"
+              title="File"
+            />
+            <v-list-item
+              v-if="parquetSchema"
+              @click="schemaDialogOpen = true"
+              title="Schema"
+            />
             <v-list-item
               v-if="source"
-              title="Row Groups / Statistics"
               @click="parquetStatsDialogOpen = true"
+              title="Row Groups / Statistics"
             />
-          </v-list>
-        </v-menu>
-        <v-menu v-if="kvMenuItems.length">
-          <template #activator="{ props }">
-            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
+            <v-menu v-if="kvMenuItems.length" location="end">
+              <template #activator="{ props }">
+                <v-list-item v-bind="props" title="Metadata" append-icon="mdi-chevron-right" />
+              </template>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="item in kvMenuItems"
+                  :key="item.key"
+                  :title="item.label"
+                  @click="openKvMetadata(item.key)"
+                />
+              </v-list>
+            </v-menu>
           </template>
-          <v-list density="compact">
-            <v-list-item
-              v-for="item in kvMenuItems"
-              :key="item.key"
-              :title="item.label"
-              @click="openKvMetadata(item.key)"
-            />
-          </v-list>
-        </v-menu>
-      </template>
-      <v-divider vertical class="ma-2" />
-      <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
-      <v-btn size="small" @click="handleExternalLinks('imprint')">Imprint</v-btn>
-      <v-btn size="small" @click="handleExternalLinks('privacy')">Privacy</v-btn>
+          <v-divider class="my-2" />
+          <v-list-item @click="aboutDialogOpen = true" title="About" />
+          <v-list-item @click="handleExternalLinks('imprint')" title="Imprint" />
+          <v-list-item @click="handleExternalLinks('privacy')" title="Privacy Policy" />
+        </v-list>
+      </v-menu>
     </v-app-bar>
 
     <v-main>
@@ -443,6 +491,10 @@ export default {
     /** Whether Vuetify is currently using the dark theme */
     isDark() {
       return this.$vuetify.theme.current.dark;
+    },
+
+    isMobile() {
+      return this.$vuetify.display.smAndDown;
     },
 
     /** True only during the very first load (no schema yet) */
