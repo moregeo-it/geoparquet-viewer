@@ -66,6 +66,7 @@
               :viewport-stale="viewportStale"
               :loading="loading"
               :is-dark="isDark"
+              :bbox="reprojectedBbox"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -167,7 +168,8 @@ import {
   dropFile,
   bootstrapMetadata,
   queryData,
-  queryCount
+  queryCount,
+  transformBbox
 } from './db.js';
 import {
   buildGeoArrowTables,
@@ -270,6 +272,9 @@ export default {
       currentOffset: 0,
       lastPageFull: false,
 
+      // BBOX metadata for the primary geometry column (if available)
+      reprojectedBbox: null,
+
       // Viewport
       viewportBounds: null,
       viewportGeneration: 0,
@@ -345,6 +350,10 @@ export default {
     bboxCoveringMeta() {
       if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return null;
       return this.geoMetadata.columns[this.primaryGeoColumn]?.covering?.bbox ?? null;
+    },
+    /** The covering.bbox values as [west, south, east, north] array in WGS 84, or null if not available or invalid */
+    rawBbox() {
+      return this.geoMetadata?.columns?.[this.primaryGeoColumn]?.bbox ?? null;
     },
     /**
      * Known geometry type for the primary column (e.g. 'point', 'polygon').
@@ -531,7 +540,14 @@ export default {
       this.loadDialogOpen = true;
     }
   },
-  watch: {},
+  watch: {
+    async rawBbox() {
+      await this.reprojectBbox();
+    },
+    async sourceCrsString() {
+      await this.reprojectBbox();
+    }
+  },
   methods: {
     // ── Status & notifications ─────────────────────────────
     setStatus(msg) {
@@ -993,6 +1009,25 @@ export default {
       this.conversionHandle = null;
       this.conversionToastId = null;
       this.$snotify.warning('Conversion cancelled.', { timeout: 3000 });
+    },
+
+    async reprojectBbox() {
+      const raw = this.rawBbox;
+      if (!raw) {
+        this.reprojectedBbox = null;
+        return;
+      }
+      // No reprojection needed — already WGS84
+      if (!this.sourceCrsString) {
+        this.reprojectedBbox = raw;
+        return;
+      }
+      try {
+        this.reprojectedBbox = await transformBbox(raw, this.sourceCrsString, 'EPSG:4326');
+      } catch (e) {
+        console.warn('Could not reproject bbox for map display:', e.message);
+        this.reprojectedBbox = null;
+      }
     }
   }
 };
