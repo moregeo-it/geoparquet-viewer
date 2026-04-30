@@ -6,83 +6,7 @@
         <v-chip size="x-small" color="warning" class="ml-1 mb-1">experimental</v-chip>
       </v-app-bar-title>
       <v-spacer />
-
-      <template v-if="!isMobile">
-        <v-divider vertical class="ma-2" />
-        <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
-        <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
-        <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
-          <v-divider vertical class="ma-2" />
-          <v-btn v-if="fileInfo" size="small" @click="fileInfoDialogOpen = true"> File </v-btn>
-          <v-menu v-if="parquetSchema || source">
-            <template #activator="{ props }">
-              <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Structure</v-btn>
-            </template>
-            <v-list density="compact">
-              <v-list-item v-if="parquetSchema" title="Schema" @click="schemaDialogOpen = true" />
-              <v-list-item
-                v-if="source"
-                title="Row Groups / Statistics"
-                @click="parquetStatsDialogOpen = true"
-              />
-            </v-list>
-          </v-menu>
-          <v-menu v-if="kvMenuItems.length">
-            <template #activator="{ props }">
-              <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
-            </template>
-            <v-list density="compact">
-              <v-list-item
-                v-for="item in kvMenuItems"
-                :key="item.key"
-                :title="item.label"
-                @click="openKvMetadata(item.key)"
-              />
-            </v-list>
-          </v-menu>
-        </template>
-        <v-divider vertical class="ma-2" />
-        <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
-        <v-btn size="small" :href="imprintUrl" target="_blank">Imprint</v-btn>
-        <v-btn size="small" :href="privacyPolicyUrl" target="_blank">Privacy</v-btn>
-      </template>
-
-      <v-menu v-else>
-        <template #activator="{ props }">
-          <v-app-bar-nav-icon v-bind="props" />
-        </template>
-        <v-list density="compact">
-          <v-list-item @click="loadDialogOpen = true" title="Load Data" />
-          <v-list-item v-if="source" @click="convertDialogOpen = true" title="Convert" />
-          <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
-            <v-divider />
-            <v-list-item v-if="fileInfo" @click="fileInfoDialogOpen = true" title="File" />
-            <v-list-item v-if="parquetSchema" @click="schemaDialogOpen = true" title="Schema" />
-            <v-list-item
-              v-if="source"
-              @click="parquetStatsDialogOpen = true"
-              title="Row Groups / Statistics"
-            />
-            <v-menu v-if="kvMenuItems.length" location="end">
-              <template #activator="{ props }">
-                <v-list-item v-bind="props" title="Metadata" append-icon="mdi-chevron-right" />
-              </template>
-              <v-list density="compact">
-                <v-list-item
-                  v-for="item in kvMenuItems"
-                  :key="item.key"
-                  :title="item.label"
-                  @click="openKvMetadata(item.key)"
-                />
-              </v-list>
-            </v-menu>
-          </template>
-          <v-divider class="my-2" />
-          <v-list-item @click="aboutDialogOpen = true" title="About" />
-          <v-list-item :href="imprintUrl" target="_blank" title="Imprint" />
-          <v-list-item :href="privacyPolicyUrl" target="_blank" title="Privacy Policy" />
-        </v-list>
-      </v-menu>
+      <AppBarMenu :menu-groups="menuGroups" :is-mobile="isMobile" />
     </v-app-bar>
 
     <v-main>
@@ -221,28 +145,11 @@
       @cancel="onQuerySettingsCancel"
     />
 
-    <v-dialog v-model="confirmLoadAllOpen" width="auto">
-      <v-card>
-        <v-card-title class="text-h6">Loading all remaining data?</v-card-title>
-        <v-card-text class="text-body-2">
-          There are <strong>{{ remainingRows.toLocaleString() }}</strong> rows left to load.<br />This
-          may take a while or even fail and could use significant memory.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="confirmLoadAllOpen = false">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            @click="
-              confirmLoadAllOpen = false;
-              loadAll();
-            "
-            >Load All</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <LoadAllModal
+      v-model="confirmLoadAllOpen"
+      :remaining-rows="remainingRows"
+      @load-all="loadAll"
+    />
   </v-app>
 </template>
 
@@ -265,10 +172,12 @@ import { friendlyError } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
+import AppBarMenu from './components/AppBarMenu.vue';
 import FilterPanel from './components/FilterPanel.vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
+import LoadAllModal from './components/modals/LoadAllModal.vue';
 import ConvertModal from './components/modals/ConvertModal.vue';
 import FileInfoModal from './components/modals/FileInfoModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
@@ -309,7 +218,9 @@ export default {
     LoadDataModal,
     ParquetStatsModal,
     QuerySettingsModal,
-    SchemaModal
+    SchemaModal,
+    LoadAllModal,
+    AppBarMenu
   },
   data() {
     return {
@@ -537,6 +448,42 @@ export default {
         key,
         label: KV_FRIENDLY_NAMES[key] || key
       }));
+    },
+    menuGroups() {
+      return [
+        {
+          items: [
+            { title: 'Load Data', action: () => { this.loadDialogOpen = true; } },
+            this.source && { title: 'Convert', action: () => { this.convertDialogOpen = true; } },
+          ].filter(Boolean)
+        },
+        (this.fileInfo || this.schema || this.kvMetadata || this.geoMetadata) && {
+          items: [
+            this.fileInfo && { title: 'File', action: () => { this.fileInfoDialogOpen = true; } },
+            (this.parquetSchema || this.source) && {
+              title: 'Structure',
+              children: [
+                this.parquetSchema && { title: 'Schema', action: () => { this.schemaDialogOpen = true; } },
+                this.source && { title: 'Row Groups / Statistics', action: () => { this.parquetStatsDialogOpen = true; } },
+              ].filter(Boolean)
+            },
+            this.kvMenuItems.length && {
+              title: 'Metadata',
+              children: this.kvMenuItems.map(item => ({
+                title: item.label,
+                action: () => this.openKvMetadata(item.key)
+              }))
+            },
+          ].filter(Boolean)
+        },
+        {
+          items: [
+            { title: 'About', action: () => { this.aboutDialogOpen = true; } },
+            { title: 'Imprint', href: this.imprintUrl },
+            { title: 'Privacy', href: this.privacyPolicyUrl },
+          ]
+        }
+      ].filter(Boolean);
     }
   },
   mounted() {
