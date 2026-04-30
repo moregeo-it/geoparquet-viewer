@@ -1028,7 +1028,7 @@ export default {
         console.warn('Could not reproject bbox for map display:', e.message);
         this.wgs84Bbox = null;
       }
-    },
+    }
   }
 };
 </script>
