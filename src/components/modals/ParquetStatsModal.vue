@@ -54,7 +54,7 @@
         </v-table>
         <v-divider />
         <h4 class="text-subtitle-2 font-weight-bold pa-3 pb-1">Row Groups</h4>
-        <v-expansion-panels v-model="openPanel" variant="accordion" eager="true">
+        <v-expansion-panels v-model="openPanel" variant="accordion" eager>
           <v-expansion-panel v-for="(group, i) in rowGroups" :key="group.id" :value="i">
             <v-expansion-panel-title>
               <strong>Row Group {{ group.id }}</strong>
@@ -62,7 +62,7 @@
                 ({{ group.numRows.toLocaleString() }} rows, {{ group.columns.length }} columns)
               </span>
             </v-expansion-panel-title>
-            <v-expansion-panel-text eager="true">
+            <v-expansion-panel-text eager>
               <v-table v-if="openPanel === i" density="compact" class="stats-table">
                 <thead>
                   <tr>

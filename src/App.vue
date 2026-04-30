@@ -65,6 +65,7 @@
               :columns="visibleColumns"
               :selectedIndex="selectedIndex"
               :loading="loading"
+              :is-dark="isDark"
               @select="onTableSelect"
             />
             <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2">
@@ -91,6 +92,7 @@
               :wkb-by-index="wkbByIndex"
               :viewport-stale="viewportStale"
               :loading="loading"
+              :is-dark="isDark"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -143,6 +145,7 @@
     />
     <SchemaModal
       v-model="schemaDialogOpen"
+      :is-dark="isDark"
       :parquet-schema="parquetSchema || []"
       :geo-metadata="geoMetadata"
     />
@@ -435,6 +438,11 @@ export default {
         crsLabel
       };
     },
+    /** Whether Vuetify is currently using the dark theme */
+    isDark() {
+      return this.$vuetify.theme.current.dark;
+    },
+
     /** True only during the very first load (no schema yet) */
 
     initialLoading() {

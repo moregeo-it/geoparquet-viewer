@@ -23,8 +23,12 @@ import { parseWKB } from '@walkthru-earth/objex-utils';
 
 const NORMAL_FILL = [51, 153, 204, 120];
 const NORMAL_LINE = [51, 153, 204, 200];
-const SELECTED_FILL = [255, 80, 80, 180];
-const SELECTED_LINE = [255, 0, 0, 255];
+
+// Selection colors per theme (must stay in sync with TableView CSS)
+const SELECTED_FILL_LIGHT = [255, 152, 0, 160];
+const SELECTED_LINE_LIGHT = [230, 120, 0, 255];
+const SELECTED_FILL_DARK = [255, 183, 77, 180];
+const SELECTED_LINE_DARK = [255, 160, 0, 255];
 
 export default {
   name: 'MapView',
@@ -34,7 +38,8 @@ export default {
     bounds: { type: Array, default: null },
     wkbByIndex: { type: Object, default: () => ({}) },
     viewportStale: { type: Boolean, default: false },
-    loading: { type: Boolean, default: false }
+    loading: { type: Boolean, default: false },
+    isDark: { type: Boolean, default: false }
   },
   emits: ['select', 'viewportChange', 'reloadViewport'],
   data() {
@@ -56,6 +61,9 @@ export default {
       }
     },
     selectedIndex() {
+      this.updateLayers();
+    },
+    isDark() {
       this.updateLayers();
     },
     bounds() {
@@ -140,6 +148,8 @@ export default {
       const layers = [];
       if (this.geoArrowResults.length > 0) {
         const selectedIndex = this.selectedIndex;
+        const SELECTED_FILL = this.isDark ? SELECTED_FILL_DARK : SELECTED_FILL_LIGHT;
+        const SELECTED_LINE = this.isDark ? SELECTED_LINE_DARK : SELECTED_LINE_LIGHT;
         const emitSelectFromInfo = (info) => {
           const index = this.rowIndex(info?.object);
           if (index === null) return;
@@ -181,7 +191,7 @@ export default {
                 },
                 onClick: emitSelectFromInfo,
                 updateTriggers: {
-                  getFillColor: [selectedIndex]
+                  getFillColor: [selectedIndex, this.isDark]
                 }
               })
             );
@@ -208,7 +218,7 @@ export default {
                 },
                 onClick: emitSelectFromInfo,
                 updateTriggers: {
-                  getColor: [selectedIndex]
+                  getColor: [selectedIndex, this.isDark]
                 }
               })
             );
@@ -234,8 +244,8 @@ export default {
                 },
                 onClick: emitSelectFromInfo,
                 updateTriggers: {
-                  getFillColor: [selectedIndex],
-                  getLineColor: [selectedIndex]
+                  getFillColor: [selectedIndex, this.isDark],
+                  getLineColor: [selectedIndex, this.isDark]
                 }
               })
             );
