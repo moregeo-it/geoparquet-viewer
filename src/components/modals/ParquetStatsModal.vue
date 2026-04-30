@@ -198,6 +198,13 @@ export default {
       if (open && !this.stats && !this.loading) {
         this.fetchStats();
       }
+    },
+    source() {
+      this.stats = null;
+      this.openPanel = null;
+      if (this.modelValue) {
+        this.fetchStats();
+      }
     }
   },
   methods: {
