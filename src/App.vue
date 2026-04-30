@@ -41,6 +41,8 @@
       </template>
       <v-divider vertical class="ma-2" />
       <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
+      <v-btn size="small" @click="handleExternalLinks('imprint')">Imprint</v-btn>
+      <v-btn size="small" @click="handleExternalLinks('privacy')">Privacy</v-btn>
     </v-app-bar>
 
     <v-main>
@@ -219,7 +221,7 @@ import {
   toBinary,
   findGeoColumn
 } from '@walkthru-earth/objex-utils';
-import { friendlyError } from './utils.js';
+import { friendlyError, navigateToExternalLinks } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -509,6 +511,10 @@ export default {
       const info = friendlyError(err);
       const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
       this.$snotify.error(body, info.title, { timeout: 0, closeOnClick: true });
+    },
+
+    handleExternalLinks(type) {
+      navigateToExternalLinks(type);
     },
 
     openKvMetadata(key) {

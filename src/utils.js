@@ -19,6 +19,18 @@ export default class Utils {
 }
 
 /**
+ * Open external links in a new tab. Expects a type ('imprint' or 'privacy') and looks up the corresponding URL.
+ */
+export function navigateToExternalLinks(type) {
+  const urls = {
+    imprint: 'https://moregeo.it/imprint',
+    privacy: 'https://moregeo.it/privacy'
+  };
+  const url = urls[type];
+  if (url) window.open(url, '_blank');
+}
+
+/**
  * Map raw DuckDB/WASM/network errors to user-friendly messages.
  * Returns { title, detail, suggestion }.
  */
