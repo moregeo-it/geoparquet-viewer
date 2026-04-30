@@ -41,8 +41,24 @@
         </tr>
       </template>
 
-      <template #[`item.__index`]="{ value }">
-        <span class="text-grey text-caption">{{ value + 1 }}</span>
+      <template #item="{ item, columns: cols }">
+        <tr v-bind="rowProps({ item })" @click="onRowClick($event, { item })">
+          <td
+            v-for="col in cols"
+            :key="col.key"
+            :class="{ 'text-center': item[col.key] === null || item[col.key] === undefined }"
+          >
+            <span v-if="col.key === '__index'" class="text-grey text-caption">{{
+              item.__index + 1
+            }}</span>
+            <span
+              v-else-if="item[col.key] === null || item[col.key] === undefined"
+              class="text-grey text-caption font-italic"
+              >n/a</span
+            >
+            <span v-else>{{ item[col.key] }}</span>
+          </td>
+        </tr>
       </template>
     </v-data-table-virtual>
   </div>
