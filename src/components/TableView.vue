@@ -41,14 +41,35 @@
         </tr>
       </template>
 
-      <template #[`item.__index`]="{ value }">
-        <span class="text-grey text-caption">{{ value + 1 }}</span>
+      <template #item="{ item, columns: cols }">
+        <tr v-bind="rowProps({ item })" @click="onRowClick($event, { item })">
+          <td
+            v-for="col in cols"
+            :key="col.key"
+            :class="{
+              'text-center': item[col.key] === null || item[col.key] === undefined,
+              'text-right': col.key === '__index' || NUMERIC_TYPE_RE.test(col.subtitle ?? '')
+            }"
+          >
+            <span v-if="col.key === '__index'" class="text-grey text-caption">{{
+              item.__index + 1
+            }}</span>
+            <span
+              v-else-if="item[col.key] === null || item[col.key] === undefined"
+              class="text-grey text-caption font-italic"
+              >n/a</span
+            >
+            <span v-else>{{ item[col.key] }}</span>
+          </td>
+        </tr>
       </template>
     </v-data-table-virtual>
   </div>
 </template>
 
 <script>
+import { markRaw } from 'vue';
+
 export default {
   name: 'TableView',
   props: {
@@ -59,6 +80,13 @@ export default {
     isDark: { type: Boolean, default: false }
   },
   emits: ['select'],
+  data() {
+    return {
+      NUMERIC_TYPE_RE: markRaw(
+        /^u?(tinyint|smallint|integer|bigint|hugeint|int\d*|float|double|real|decimal|numeric)(\([\d,\s]*\))?$/i
+      )
+    };
+  },
   computed: {
     tableHeaders() {
       return [
