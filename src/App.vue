@@ -66,7 +66,7 @@
               :viewport-stale="viewportStale"
               :loading="loading"
               :is-dark="isDark"
-              :bbox="wgs84Bbox"
+              :bbox="reprojectedBbox"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -273,7 +273,7 @@ export default {
       lastPageFull: false,
 
       // BBOX metadata for the primary geometry column (if available)
-      wgs84Bbox: null,
+      reprojectedBbox: null,
 
       // Viewport
       viewportBounds: null,
@@ -1014,19 +1014,19 @@ export default {
     async reprojectBbox() {
       const raw = this.rawBbox;
       if (!raw) {
-        this.wgs84Bbox = null;
+        this.reprojectedBbox = null;
         return;
       }
       // No reprojection needed — already WGS84
       if (!this.sourceCrsString) {
-        this.wgs84Bbox = raw;
+        this.reprojectedBbox = raw;
         return;
       }
       try {
-        this.wgs84Bbox = await transformBbox(raw, this.sourceCrsString, 'EPSG:4326');
+        this.reprojectedBbox = await transformBbox(raw, this.sourceCrsString, 'EPSG:4326');
       } catch (e) {
         console.warn('Could not reproject bbox for map display:', e.message);
-        this.wgs84Bbox = null;
+        this.reprojectedBbox = null;
       }
     }
   }

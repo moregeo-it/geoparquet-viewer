@@ -306,7 +306,7 @@ export default {
       const [minx, miny, maxx, maxy] = bbox;
       if ([minx, miny, maxx, maxy].some((v) => !isFinite(v))) return; // validate bbox values
 
-      // Sanity-check that coordinates are in valid WGS84 range before adding source/layer.
+      // Sanity-check that coordinates are in projection of the geometries before adding source/layer.
       if (
         Math.abs(minx) > 180 ||
         Math.abs(maxx) > 180 ||
