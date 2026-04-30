@@ -150,6 +150,7 @@
       v-model="fileInfoDialogOpen"
       :file-info="fileInfo"
       :source="source || ''"
+      :row-group-size="rowGroupSize || null"
       :geo-version="geoMetadata?.version || null"
     />
     <KvMetadataModal

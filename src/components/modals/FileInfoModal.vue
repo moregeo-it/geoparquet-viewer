@@ -50,6 +50,10 @@
               <td class="font-weight-bold text-no-wrap">Row Groups</td>
               <td>{{ fileInfo.num_row_groups.toLocaleString() }}</td>
             </tr>
+            <tr v-if="rowGroupSize != null">
+              <td class="font-weight-bold text-no-wrap">Row Group Size</td>
+              <td>{{ rowGroupSize.toLocaleString() }}</td>
+            </tr>
             <tr v-if="fileInfo?.created_by">
               <td class="font-weight-bold text-no-wrap">Created By</td>
               <td class="text-body-2">{{ fileInfo.created_by }}</td>
@@ -79,7 +83,8 @@ export default {
     modelValue: { type: Boolean, default: false },
     fileInfo: { type: Object, default: null },
     source: { type: String, default: '' },
-    geoVersion: { type: String, default: null }
+    geoVersion: { type: String, default: null },
+    rowGroupSize: { type: Number, default: null },
   },
   emits: ['update:modelValue'],
   computed: {
