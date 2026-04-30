@@ -6,41 +6,7 @@
         <v-chip size="x-small" color="warning" class="ml-1 mb-1">experimental</v-chip>
       </v-app-bar-title>
       <v-spacer />
-      <v-divider vertical class="ma-2" />
-      <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
-      <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
-      <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
-        <v-divider vertical class="ma-2" />
-        <v-btn v-if="fileInfo" size="small" @click="fileInfoDialogOpen = true"> File </v-btn>
-        <v-menu v-if="parquetSchema || source">
-          <template #activator="{ props }">
-            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Structure</v-btn>
-          </template>
-          <v-list density="compact">
-            <v-list-item v-if="parquetSchema" title="Schema" @click="schemaDialogOpen = true" />
-            <v-list-item
-              v-if="source"
-              title="Row Groups / Statistics"
-              @click="parquetStatsDialogOpen = true"
-            />
-          </v-list>
-        </v-menu>
-        <v-menu v-if="kvMenuItems.length">
-          <template #activator="{ props }">
-            <v-btn size="small" v-bind="props" append-icon="mdi-chevron-down">Metadata</v-btn>
-          </template>
-          <v-list density="compact">
-            <v-list-item
-              v-for="item in kvMenuItems"
-              :key="item.key"
-              :title="item.label"
-              @click="openKvMetadata(item.key)"
-            />
-          </v-list>
-        </v-menu>
-      </template>
-      <v-divider vertical class="ma-2" />
-      <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
+      <AppBarMenu :menu-groups="menuGroups" :is-mobile="isMobile" />
     </v-app-bar>
 
     <v-main>
@@ -65,6 +31,7 @@
               :columns="visibleColumns"
               :selectedIndex="selectedIndex"
               :loading="loading"
+              :is-dark="isDark"
               @select="onTableSelect"
             />
             <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2">
@@ -91,6 +58,7 @@
               :wkb-by-index="wkbByIndex"
               :viewport-stale="viewportStale"
               :loading="loading"
+              :is-dark="isDark"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -143,6 +111,7 @@
     />
     <SchemaModal
       v-model="schemaDialogOpen"
+      :is-dark="isDark"
       :parquet-schema="parquetSchema || []"
       :geo-metadata="geoMetadata"
     />
@@ -150,6 +119,7 @@
       v-model="fileInfoDialogOpen"
       :file-info="fileInfo"
       :source="source || ''"
+      :row-group-size="rowGroupSize || null"
       :geo-version="geoMetadata?.version || null"
     />
     <KvMetadataModal
@@ -175,28 +145,11 @@
       @cancel="onQuerySettingsCancel"
     />
 
-    <v-dialog v-model="confirmLoadAllOpen" width="auto">
-      <v-card>
-        <v-card-title class="text-h6">Loading all remaining data?</v-card-title>
-        <v-card-text class="text-body-2">
-          There are <strong>{{ remainingRows.toLocaleString() }}</strong> rows left to load.<br />This
-          may take a while or even fail and could use significant memory.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="confirmLoadAllOpen = false">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            @click="
-              confirmLoadAllOpen = false;
-              loadAll();
-            "
-            >Load All</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <LoadAllModal
+      v-model="confirmLoadAllOpen"
+      :remaining-rows="remainingRows"
+      @load-all="loadAll"
+    />
   </v-app>
 </template>
 
@@ -219,10 +172,12 @@ import { friendlyError } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
+import AppBarMenu from './components/AppBarMenu.vue';
 import FilterPanel from './components/FilterPanel.vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 
 import AboutModal from './components/modals/AboutModal.vue';
+import LoadAllModal from './components/modals/LoadAllModal.vue';
 import ConvertModal from './components/modals/ConvertModal.vue';
 import FileInfoModal from './components/modals/FileInfoModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
@@ -263,7 +218,9 @@ export default {
     LoadDataModal,
     ParquetStatsModal,
     QuerySettingsModal,
-    SchemaModal
+    SchemaModal,
+    LoadAllModal,
+    AppBarMenu
   },
   data() {
     return {
@@ -315,6 +272,10 @@ export default {
       // UI state
       loading: false,
       statusMessage: '',
+
+      // External links
+      imprintUrl: 'https://moregeo.it/imprint',
+      privacyPolicyUrl: 'https://moregeo.it/privacy',
 
       // Query settings (user preferences applied before first query)
       selectedColumns: null,
@@ -434,6 +395,15 @@ export default {
         crsLabel
       };
     },
+    /** Whether Vuetify is currently using the dark theme */
+    isDark() {
+      return this.$vuetify.theme.current.dark;
+    },
+
+    isMobile() {
+      return this.$vuetify.display.smAndDown;
+    },
+
     /** True only during the very first load (no schema yet) */
 
     initialLoading() {
@@ -478,6 +448,72 @@ export default {
         key,
         label: KV_FRIENDLY_NAMES[key] || key
       }));
+    },
+    menuGroups() {
+      return [
+        {
+          items: [
+            {
+              title: 'Load Data',
+              action: () => {
+                this.loadDialogOpen = true;
+              }
+            },
+            this.source && {
+              title: 'Convert',
+              action: () => {
+                this.convertDialogOpen = true;
+              }
+            }
+          ].filter(Boolean)
+        },
+        (this.fileInfo || this.schema || this.kvMetadata || this.geoMetadata) && {
+          items: [
+            this.fileInfo && {
+              title: 'File',
+              action: () => {
+                this.fileInfoDialogOpen = true;
+              }
+            },
+            (this.parquetSchema || this.source) && {
+              title: 'Structure',
+              children: [
+                this.parquetSchema && {
+                  title: 'Schema',
+                  action: () => {
+                    this.schemaDialogOpen = true;
+                  }
+                },
+                this.source && {
+                  title: 'Row Groups / Statistics',
+                  action: () => {
+                    this.parquetStatsDialogOpen = true;
+                  }
+                }
+              ].filter(Boolean)
+            },
+            this.kvMenuItems.length && {
+              title: 'Metadata',
+              children: this.kvMenuItems.map((item) => ({
+                title: item.label,
+                action: () => this.openKvMetadata(item.key)
+              }))
+            }
+          ].filter(Boolean)
+        },
+        {
+          items: [
+            {
+              title: 'About',
+              action: () => {
+                this.aboutDialogOpen = true;
+              }
+            },
+            { title: 'Imprint', href: this.imprintUrl },
+            { title: 'Privacy Policy', href: this.privacyPolicyUrl }
+          ]
+        }
+      ].filter(Boolean);
     }
   },
   mounted() {

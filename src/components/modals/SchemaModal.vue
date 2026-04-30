@@ -31,7 +31,12 @@
           </thead>
           <tbody>
             <template v-for="node in visibleNodes" :key="node.id">
-              <tr :class="{ 'bg-green-lighten-5': isGeoColumn(node.name) }">
+              <tr
+                :class="{
+                  'bg-green-lighten-5': isGeoColumn(node.name) && !isDark,
+                  'bg-grey-darken-1': isGeoColumn(node.name) && isDark
+                }"
+              >
                 <td>{{ node.column_id }}</td>
                 <td>
                   <span
@@ -124,7 +129,8 @@ export default {
   props: {
     modelValue: { type: Boolean, default: false },
     parquetSchema: { type: Array, default: () => [] },
-    geoMetadata: { type: Object, default: null }
+    geoMetadata: { type: Object, default: null },
+    isDark: { type: Boolean, default: false }
   },
   emits: ['update:modelValue'],
   data() {

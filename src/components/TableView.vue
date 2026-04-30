@@ -55,7 +55,8 @@ export default {
     rows: { type: Array, default: () => [] },
     columns: { type: Array, default: () => [] },
     selectedIndex: { type: Number, default: null },
-    loading: { type: Boolean, default: false }
+    loading: { type: Boolean, default: false },
+    isDark: { type: Boolean, default: false }
   },
   emits: ['select'],
   computed: {
@@ -87,7 +88,12 @@ export default {
     },
     rowProps({ item }) {
       return {
-        class: item.__index === this.selectedIndex ? 'bg-red-lighten-4' : '',
+        class:
+          item.__index === this.selectedIndex
+            ? this.isDark
+              ? 'selected-row-dark'
+              : 'selected-row-light'
+            : '',
         style: 'cursor: pointer'
       };
     },
@@ -120,5 +126,14 @@ export default {
 .table-header {
   background: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+</style>
+
+<style>
+.selected-row-light {
+  background-color: rgba(255, 152, 0, 0.18) !important;
+}
+.selected-row-dark {
+  background-color: rgba(255, 183, 77, 0.25) !important;
 }
 </style>
