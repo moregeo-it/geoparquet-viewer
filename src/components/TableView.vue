@@ -46,7 +46,10 @@
           <td
             v-for="col in cols"
             :key="col.key"
-            :class="{ 'text-center': item[col.key] === null || item[col.key] === undefined }"
+            :class="{
+              'text-center': item[col.key] === null || item[col.key] === undefined,
+              'text-right': col.key === '__index' || NUMERIC_TYPE_RE.test(col.subtitle ?? '')
+            }"
           >
             <span v-if="col.key === '__index'" class="text-grey text-caption">{{
               item.__index + 1
@@ -65,6 +68,8 @@
 </template>
 
 <script>
+import { markRaw } from 'vue';
+
 export default {
   name: 'TableView',
   props: {
@@ -75,6 +80,13 @@ export default {
     isDark: { type: Boolean, default: false }
   },
   emits: ['select'],
+  data() {
+    return {
+      NUMERIC_TYPE_RE: markRaw(
+        /^u?(tinyint|smallint|integer|bigint|hugeint|int\d*|float|double|real|decimal|numeric)(\([\d,\s]*\))?$/i
+      )
+    };
+  },
   computed: {
     tableHeaders() {
       return [
