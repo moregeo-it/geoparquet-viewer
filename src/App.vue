@@ -510,7 +510,7 @@ export default {
               }
             },
             { title: 'Imprint', href: this.imprintUrl },
-            { title: 'Privacy', href: this.privacyPolicyUrl }
+            { title: 'Privacy Policy', href: this.privacyPolicyUrl }
           ]
         }
       ].filter(Boolean);
