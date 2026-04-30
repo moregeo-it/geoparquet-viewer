@@ -39,7 +39,8 @@ export default {
     wkbByIndex: { type: Object, default: () => ({}) },
     viewportStale: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
-    isDark: { type: Boolean, default: false }
+    isDark: { type: Boolean, default: false },
+    bbox: { type: Array, default: null }
   },
   emits: ['select', 'viewportChange', 'reloadViewport'],
   data() {
@@ -68,6 +69,11 @@ export default {
     },
     bounds() {
       this.fitBounds();
+    },
+    bbox: {
+      handler() {
+        this.updateBboxLayer();
+      }
     }
   },
   mounted() {
@@ -125,6 +131,7 @@ export default {
       this.map.on('load', () => {
         this.ready = true;
         this.updateLayers();
+        this.updateBboxLayer();
         if (this.bounds) this.fitBounds();
       });
 
@@ -281,6 +288,56 @@ export default {
       } catch (e) {
         console.warn('fitBounds failed:', e.message);
       }
+    },
+
+    updateBboxLayer() {
+      if (!this.map || !this.ready) return;
+      const bbox = this.bbox;
+
+      // Remove existing layers/source first
+      if (this.map.getLayer('bbox-fill'))   this.map.removeLayer('bbox-fill');
+      if (this.map.getSource('bbox'))       this.map.removeSource('bbox');
+
+      if (!bbox) return;
+      const [minx, miny, maxx, maxy] = bbox;
+      if ([minx, miny, maxx, maxy].some(v => !isFinite(v))) return; // validate bbox values
+
+      // Sanity-check that coordinates are in valid WGS84 range before adding source/layer.
+      if (Math.abs(minx) > 180 || Math.abs(maxx) > 180 || Math.abs(miny) > 90 || Math.abs(maxy) > 90) {
+        console.warn(
+          'MapView: bbox appears to be in non-WGS84 CRS — skipping bbox layer',
+          bbox
+        );
+        return;
+      }
+
+      // Add a GeoJSON source with a polygon geometry representing the bbox as a hole in a world-covering polygon.
+      this.map.addSource('bbox', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              // Outer ring: entire world
+              [[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]],
+              // Inner ring (hole): the bbox, wound clockwise to cut it out
+              [[minx, miny], [minx, maxy], [maxx, maxy], [maxx, miny], [minx, miny]]
+            ]
+          }
+        }
+      });
+
+      // Subtle fill so it doesn't obscure the data underneath
+      this.map.addLayer({
+        id: 'bbox-fill',
+        type: 'fill',
+        source: 'bbox',
+        paint: {
+          'fill-color': '#000000',
+          'fill-opacity': 0.25
+        }
+      });
     },
 
     /**
