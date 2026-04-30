@@ -2,10 +2,17 @@
   <v-app>
     <v-app-bar color="surface-variant" density="compact">
       <v-app-bar-title>
-        GeoParquet Viewer
-        <v-chip size="x-small" color="warning" class="ml-1 mb-1">experimental</v-chip>
+        <a href="https://moregeo.it" target="_blank">
+          <img
+            src="https://moregeo.it/logo.png"
+            alt="moreGeo"
+            height="44"
+            style="margin-top: 4px"
+          />
+        </a>
+        <span>GeoParquet Viewer</span>
+        <v-chip size="x-small" color="warning">experimental</v-chip>
       </v-app-bar-title>
-      <v-spacer />
       <AppBarMenu :menu-groups="menuGroups" :is-mobile="isMobile" />
     </v-app-bar>
 
@@ -1006,6 +1013,12 @@ export default {
 .content-panels {
   height: calc(100vh - 48px - 36px); /* 100vh - appbar(48px) - toolbar(36px) */
   overflow: hidden;
+}
+
+.v-app-bar-title .v-toolbar-title__placeholder {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .v-footer {
