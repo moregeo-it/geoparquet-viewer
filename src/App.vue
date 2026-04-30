@@ -453,34 +453,64 @@ export default {
       return [
         {
           items: [
-            { title: 'Load Data', action: () => { this.loadDialogOpen = true; } },
-            this.source && { title: 'Convert', action: () => { this.convertDialogOpen = true; } },
+            {
+              title: 'Load Data',
+              action: () => {
+                this.loadDialogOpen = true;
+              }
+            },
+            this.source && {
+              title: 'Convert',
+              action: () => {
+                this.convertDialogOpen = true;
+              }
+            }
           ].filter(Boolean)
         },
         (this.fileInfo || this.schema || this.kvMetadata || this.geoMetadata) && {
           items: [
-            this.fileInfo && { title: 'File', action: () => { this.fileInfoDialogOpen = true; } },
+            this.fileInfo && {
+              title: 'File',
+              action: () => {
+                this.fileInfoDialogOpen = true;
+              }
+            },
             (this.parquetSchema || this.source) && {
               title: 'Structure',
               children: [
-                this.parquetSchema && { title: 'Schema', action: () => { this.schemaDialogOpen = true; } },
-                this.source && { title: 'Row Groups / Statistics', action: () => { this.parquetStatsDialogOpen = true; } },
+                this.parquetSchema && {
+                  title: 'Schema',
+                  action: () => {
+                    this.schemaDialogOpen = true;
+                  }
+                },
+                this.source && {
+                  title: 'Row Groups / Statistics',
+                  action: () => {
+                    this.parquetStatsDialogOpen = true;
+                  }
+                }
               ].filter(Boolean)
             },
             this.kvMenuItems.length && {
               title: 'Metadata',
-              children: this.kvMenuItems.map(item => ({
+              children: this.kvMenuItems.map((item) => ({
                 title: item.label,
                 action: () => this.openKvMetadata(item.key)
               }))
-            },
+            }
           ].filter(Boolean)
         },
         {
           items: [
-            { title: 'About', action: () => { this.aboutDialogOpen = true; } },
+            {
+              title: 'About',
+              action: () => {
+                this.aboutDialogOpen = true;
+              }
+            },
             { title: 'Imprint', href: this.imprintUrl },
-            { title: 'Privacy', href: this.privacyPolicyUrl },
+            { title: 'Privacy', href: this.privacyPolicyUrl }
           ]
         }
       ].filter(Boolean);

@@ -22,7 +22,13 @@
           </v-list>
         </v-menu>
         <!-- Plain button -->
-        <v-btn v-else size="small" :href="item.href" :target="item.href ? '_blank' : undefined" @click="item.action?.()">
+        <v-btn
+          v-else
+          size="small"
+          :href="item.href"
+          :target="item.href ? '_blank' : undefined"
+          @click="item.action?.()"
+        >
           {{ item.title }}
         </v-btn>
       </template>
@@ -48,7 +54,10 @@
               :key="child.title"
               :title="child.title"
               class="pl-6"
-              @click="child.action(); open = false"
+              @click="
+                child.action();
+                open = false;
+              "
             />
           </v-list-group>
           <!-- Plain item -->
@@ -57,7 +66,7 @@
             :title="item.title"
             :href="item.href"
             :target="item.href ? '_blank' : undefined"
-            @click="item.action && (item.action(), open = false)"
+            @click="item.action && (item.action(), (open = false))"
           />
         </template>
       </template>
