@@ -44,7 +44,7 @@
         <v-divider vertical class="ma-2" />
         <v-btn size="small" @click="aboutDialogOpen = true">About</v-btn>
         <v-btn size="small" @click="handleExternalLinks('imprint')">Imprint</v-btn>
-        <v-btn size="small" @click="handleExternalLinks('privacy')">Privacy</v-btn>
+        <v-btn size="small" @click="handleExternalLinks('privacy')">Privacy Policy</v-btn>
       </template>
 
       <v-menu v-else>
