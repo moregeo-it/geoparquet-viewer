@@ -362,31 +362,22 @@ export async function queryParquetStats(source) {
 }
 
 /**
- * Transform a WGS84 bbox [west, south, east, north] into the given source CRS.
- * Transforms all four corners and returns [minx, miny, maxx, maxy] in source CRS units.
+ * Transform a bbox [west, south, east, north] from sourceCrs to targetCrs.
+ * Uses ST_MakeEnvelope + ST_Transform to project the envelope polygon, then extracts bounds.
  * Requires the spatial extension to be loaded.
  *
- * @param {number[]} bbox - [west, south, east, north] in WGS84.
- * @param {string} sourceCrs - PROJJSON string of the target CRS.
- * @returns {Promise<number[]>} [minx, miny, maxx, maxy] in source CRS.
+ * @param {number[]} bbox - [west, south, east, north] in sourceCrs.
+ * @param {string} sourceCrs - PROJJSON string or EPSG code of the source CRS.
+ * @param {string} targetCrs - PROJJSON string or EPSG code of the target CRS.
+ * @returns {Promise<number[]>} [minx, miny, maxx, maxy] in targetCrs.
  */
-export async function transformBbox(bbox, sourceCrs) {
+export async function transformBbox(bbox, sourceCrs, targetCrs) {
   const [west, south, east, north] = bbox;
-  const crsLiteral = sourceCrs.replace(/'/g, "''");
+  const srcLiteral = sourceCrs.replace(/'/g, "''");
+  const tgtLiteral = targetCrs.replace(/'/g, "''");
   const result = await query(
-    `SELECT MIN(x) as minx, MIN(y) as miny, MAX(x) as maxx, MAX(y) as maxy FROM (
-       SELECT ST_X(ST_Transform(ST_Point(${west}, ${south}), 'EPSG:4326', '${crsLiteral}', true)) as x,
-              ST_Y(ST_Transform(ST_Point(${west}, ${south}), 'EPSG:4326', '${crsLiteral}', true)) as y
-       UNION ALL
-       SELECT ST_X(ST_Transform(ST_Point(${east}, ${south}), 'EPSG:4326', '${crsLiteral}', true)),
-              ST_Y(ST_Transform(ST_Point(${east}, ${south}), 'EPSG:4326', '${crsLiteral}', true))
-       UNION ALL
-       SELECT ST_X(ST_Transform(ST_Point(${east}, ${north}), 'EPSG:4326', '${crsLiteral}', true)),
-              ST_Y(ST_Transform(ST_Point(${east}, ${north}), 'EPSG:4326', '${crsLiteral}', true))
-       UNION ALL
-       SELECT ST_X(ST_Transform(ST_Point(${west}, ${north}), 'EPSG:4326', '${crsLiteral}', true)),
-              ST_Y(ST_Transform(ST_Point(${west}, ${north}), 'EPSG:4326', '${crsLiteral}', true))
-     )`
+    `SELECT ST_XMin(g) as minx, ST_YMin(g) as miny, ST_XMax(g) as maxx, ST_YMax(g) as maxy
+     FROM (SELECT ST_Transform(ST_MakeEnvelope(${west}, ${south}, ${east}, ${north}), '${srcLiteral}', '${tgtLiteral}', true) as g)`
   );
   const row = result.toArray()[0];
   return [Number(row.minx), Number(row.miny), Number(row.maxx), Number(row.maxy)];
@@ -421,7 +412,7 @@ export async function queryCount(
   let effectiveBbox = bbox;
   if (bbox && bboxCovering && sourceCrs && _spatialLoaded) {
     try {
-      effectiveBbox = await transformBbox(bbox, sourceCrs);
+      effectiveBbox = await transformBbox(bbox, 'EPSG:4326', sourceCrs);
     } catch (e) {
       console.warn('Failed to transform bbox for queryCount:', e.message);
     }
@@ -468,7 +459,7 @@ export async function queryData(
   let effectiveBbox = bbox;
   if (bbox && bboxCovering && sourceCrs && _spatialLoaded) {
     try {
-      effectiveBbox = await transformBbox(bbox, sourceCrs);
+      effectiveBbox = await transformBbox(bbox, 'EPSG:4326', sourceCrs);
     } catch (e) {
       console.warn('Failed to transform bbox for queryData:', e.message);
     }
