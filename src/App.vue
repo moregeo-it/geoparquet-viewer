@@ -12,7 +12,7 @@
         <v-btn size="small" @click="loadDialogOpen = true">Load Data</v-btn>
         <v-btn v-if="source" size="small" @click="convertDialogOpen = true"> Convert </v-btn>
         <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
-            <v-divider vertical class="ma-2" />
+          <v-divider vertical class="ma-2" />
           <v-btn v-if="fileInfo" size="small" @click="fileInfoDialogOpen = true"> File </v-btn>
           <v-menu v-if="parquetSchema || source">
             <template #activator="{ props }">
@@ -49,23 +49,15 @@
 
       <v-menu v-else>
         <template #activator="{ props }">
-           <v-app-bar-nav-icon v-bind="props" />
+          <v-app-bar-nav-icon v-bind="props" />
         </template>
         <v-list density="compact">
           <v-list-item @click="loadDialogOpen = true" title="Load Data" />
           <v-list-item v-if="source" @click="convertDialogOpen = true" title="Convert" />
           <template v-if="fileInfo || schema || kvMetadata || geoMetadata">
             <v-divider />
-            <v-list-item
-              v-if="fileInfo"
-              @click="fileInfoDialogOpen = true"
-              title="File"
-            />
-            <v-list-item
-              v-if="parquetSchema"
-              @click="schemaDialogOpen = true"
-              title="Schema"
-            />
+            <v-list-item v-if="fileInfo" @click="fileInfoDialogOpen = true" title="File" />
+            <v-list-item v-if="parquetSchema" @click="schemaDialogOpen = true" title="Schema" />
             <v-list-item
               v-if="source"
               @click="parquetStatsDialogOpen = true"

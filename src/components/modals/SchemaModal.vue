@@ -31,7 +31,12 @@
           </thead>
           <tbody>
             <template v-for="node in visibleNodes" :key="node.id">
-              <tr :class="{ 'bg-green-lighten-5': isGeoColumn(node.name) && !isDark, 'bg-grey-darken-1': isGeoColumn(node.name) && isDark }">
+              <tr
+                :class="{
+                  'bg-green-lighten-5': isGeoColumn(node.name) && !isDark,
+                  'bg-grey-darken-1': isGeoColumn(node.name) && isDark
+                }"
+              >
                 <td>{{ node.column_id }}</td>
                 <td>
                   <span

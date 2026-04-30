@@ -41,7 +41,9 @@
           <tbody>
             <tr v-for="col in columnSummary" :key="col.name">
               <td class="font-weight-medium">{{ col.name }}</td>
-              <td><code>{{ col.types }}</code></td>
+              <td>
+                <code>{{ col.types }}</code>
+              </td>
               <td>{{ col.compressions }}</td>
               <td>{{ col.totalValues?.toLocaleString() }}</td>
               <td>{{ col.totalNulls != null ? col.totalNulls.toLocaleString() : '—' }}</td>
@@ -165,7 +167,8 @@ export default {
           agg.hasNulls = true;
         }
         if (row.total_compressed_size != null) agg.totalCompressed += row.total_compressed_size;
-        if (row.total_uncompressed_size != null) agg.totalUncompressed += row.total_uncompressed_size;
+        if (row.total_uncompressed_size != null)
+          agg.totalUncompressed += row.total_uncompressed_size;
         if (row.stats_min_value != null) {
           if (agg.globalMin == null || row.stats_min_value < agg.globalMin) {
             agg.globalMin = row.stats_min_value;

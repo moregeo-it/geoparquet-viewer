@@ -84,7 +84,7 @@ export default {
     fileInfo: { type: Object, default: null },
     source: { type: String, default: '' },
     geoVersion: { type: String, default: null },
-    rowGroupSize: { type: Number, default: null },
+    rowGroupSize: { type: Number, default: null }
   },
   emits: ['update:modelValue'],
   computed: {

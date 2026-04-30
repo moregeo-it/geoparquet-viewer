@@ -88,9 +88,12 @@ export default {
     },
     rowProps({ item }) {
       return {
-        class: item.__index === this.selectedIndex
-          ? (this.isDark ? 'selected-row-dark' : 'selected-row-light')
-          : '',
+        class:
+          item.__index === this.selectedIndex
+            ? this.isDark
+              ? 'selected-row-dark'
+              : 'selected-row-light'
+            : '',
         style: 'cursor: pointer'
       };
     },
