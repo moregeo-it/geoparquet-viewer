@@ -149,8 +149,15 @@
       :geo-columns="geoColumns"
       :total-rows="totalRows"
       :defaults="querySettingsDefaults"
+      :column-sizes="columnSizes"
       @apply="applyQuerySettings"
       @cancel="onQuerySettingsCancel"
+    />
+    <FileWarningModal
+      v-model="fileWarningOpen"
+      :warnings="fileWarnings"
+      @proceed="onFileWarningProceed"
+      @cancel="onFileWarningCancel"
     />
 
     <LoadAllModal
@@ -177,7 +184,7 @@ import {
   toBinary,
   findGeoColumn
 } from '@walkthru-earth/objex-utils';
-import { friendlyError } from './utils.js';
+import { friendlyError, checkFileHealth } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -192,6 +199,7 @@ import FileInfoModal from './components/modals/FileInfoModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
 import ParquetStatsModal from './components/modals/ParquetStatsModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
+import FileWarningModal from './components/modals/FileWarningModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
 import KvMetadataModal, {
   FRIENDLY_NAMES as KV_FRIENDLY_NAMES
@@ -227,6 +235,7 @@ export default {
     LoadDataModal,
     ParquetStatsModal,
     QuerySettingsModal,
+    FileWarningModal,
     SchemaModal,
     LoadAllModal,
     AppBarMenu
@@ -291,6 +300,7 @@ export default {
 
       // Query settings (user preferences applied before first query)
       selectedColumns: null,
+      columnSizes: null,
 
       // Dialog visibility
       loadDialogOpen: false,
@@ -301,6 +311,8 @@ export default {
       aboutDialogOpen: false,
       confirmLoadAllOpen: false,
       querySettingsOpen: false,
+      fileWarningOpen: false,
+      fileWarnings: [],
 
       kvMetadataInitialKey: null
     };
@@ -407,6 +419,7 @@ export default {
         selectedColumns: this.selectedColumns,
         pageSize: this.pageSize,
         rowGroupSize: this.rowGroupSize,
+        numRowGroups: this.fileInfo?.num_row_groups ?? null,
         geometryType,
         crsLabel
       };
@@ -601,6 +614,20 @@ export default {
       this.reset();
       this.source = url;
       this.displaySource = url;
+
+      // Phase 1: quick HTTP health check (non-blocking — skip on timeout/error)
+      this.loading = true;
+      this.setStatus('Checking file...');
+      const warnings = await checkFileHealth(url);
+      if (warnings.length > 0) {
+        this.loading = false;
+        this.statusMessage = '';
+        this.fileWarnings = warnings;
+        this.fileWarningOpen = true;
+        // User must click "Proceed" or "Cancel" — handled by event handlers below.
+        return;
+      }
+
       await this.loadData();
     },
 
@@ -622,6 +649,19 @@ export default {
         this.setError(e);
         this.loading = false;
       }
+    },
+
+    onFileWarningProceed() {
+      this.fileWarningOpen = false;
+      this.fileWarnings = [];
+      this.loadData();
+    },
+
+    onFileWarningCancel() {
+      this.fileWarningOpen = false;
+      this.fileWarnings = [];
+      this.reset();
+      this.loadDialogOpen = true;
     },
 
     reset() {
@@ -659,6 +699,7 @@ export default {
       this.viewportActive = false;
       this.viewportGeneration = 0;
       this.selectedColumns = null;
+      this.columnSizes = null;
     },
 
     async loadData() {
@@ -676,6 +717,7 @@ export default {
         this.fileInfo = meta.fileInfo;
         this.parquetSchema = meta.parquetSchema;
         this.rowGroupSize = meta.rowGroupSize;
+        this.columnSizes = meta.columnSizes;
 
         // Pause: let the user choose columns, page size, etc.
         this.statusMessage = '';

@@ -146,7 +146,7 @@ export function escapeSource(source) {
  */
 export async function getSchema(source) {
   const escaped = escapeSource(source);
-  const result = await query(`DESCRIBE SELECT * FROM read_parquet('${escaped}')`);
+  const result = await query(`DESCRIBE SELECT * FROM '${escaped}'`);
   return result.toArray().map((row) => ({
     name: String(row.column_name),
     type: String(row.column_type),
@@ -211,15 +211,6 @@ function geomExpr(geoColumn, alreadyGeometry) {
 }
 
 /**
- * Get the total row count of a Parquet file.
- */
-export async function getRowCount(source) {
-  const escaped = escapeSource(source);
-  const result = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
-  return Number(result.toArray()[0].cnt);
-}
-
-/**
  * Bootstrap all file metadata in minimal round-trips.
  * Combines schema, row count, row group size, and KV metadata into a single flow.
  * For remote files this dramatically reduces HTTP range request overhead since
@@ -234,12 +225,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
 
   // 1. Schema — also populates geometry type cache for queryData/queryCount
   onProgress('Reading schema...');
-  const schemaResult = await query(`DESCRIBE SELECT * FROM read_parquet('${escaped}')`);
-  const schema = schemaResult.toArray().map((row) => ({
-    name: String(row.column_name),
-    type: String(row.column_type),
-    nullable: String(row.null) === 'YES'
-  }));
+  const schema = await getSchema(source);
   cacheSchemaGeomTypes(source, schema);
 
   // Attempt to get row group size from parquet_metadata() for better pagination defaults.
@@ -260,7 +246,9 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   let fileInfo = null;
   let totalRows = -1;
   try {
-    const fileResult = await query(`SELECT * FROM parquet_file_metadata('${escaped}')`);
+    const fileResult = await query(
+      `SELECT * EXCLUDE (column_orders,footer_signing_key_metadata) FROM parquet_file_metadata('${escaped}')`
+    );
     const row = fileResult.toArray()[0];
     fileInfo = {};
     for (const field of fileResult.schema.fields) {
@@ -271,7 +259,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   } catch (e) {
     console.warn('parquet_file_metadata failed, falling back to COUNT(*):', e.message);
     try {
-      const countResult = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
+      const countResult = await query(`SELECT COUNT(*) as cnt FROM '${escaped}'`);
       totalRows = Number(countResult.toArray()[0].cnt);
     } catch {
       /* leave as -1 */
@@ -320,7 +308,32 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     console.warn('Could not read parquet schema:', e.message);
   }
 
-  return { schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema };
+  // 5. Column sizes for first row group (used for load-time warnings)
+  let columnSizes = null;
+  try {
+    const colSizeResult = await query(
+      `SELECT path_in_schema, total_compressed_size
+       FROM parquet_metadata('${escaped}')
+       WHERE row_group_id = 0`
+    );
+    columnSizes = {};
+    for (const row of colSizeResult.toArray()) {
+      columnSizes[String(row.path_in_schema)] = Number(row.total_compressed_size);
+    }
+  } catch (e) {
+    console.warn('Could not read column sizes:', e.message);
+  }
+
+  return {
+    schema,
+    totalRows,
+    rowGroupSize,
+    fileInfo,
+    kvMetadata,
+    geoMetadata,
+    parquetSchema,
+    columnSizes
+  };
 }
 
 /**

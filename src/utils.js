@@ -19,6 +19,74 @@ export default class Utils {
 }
 
 /**
+ * Pre-DuckDB health check for remote Parquet files.
+ * Reads only the last 8 bytes via HTTP Range request to determine footer size
+ * and file size without downloading any actual data.
+ *
+ * @param {string} url - Remote URL of the Parquet file.
+ * @param {object} [options]
+ * @param {number} [options.timeout=5000] - Abort if fetch takes longer (ms).
+ * @returns {Promise<{warnings: Array}>} Array of warning objects (empty = no issues).
+ */
+export async function checkFileHealth(url, { timeout = 5000 } = {}) {
+  const warnings = [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: { Range: 'bytes=-8' },
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
+    if (!resp.ok && resp.status !== 206) return warnings;
+
+    // Parse file size from Content-Range header
+    let fileSize = null;
+    const contentRange = resp.headers.get('Content-Range');
+    if (contentRange) {
+      const match = contentRange.match(/\/(\d+)$/);
+      if (match) fileSize = parseInt(match[1], 10);
+    }
+
+    // Read footer length (4 bytes LE) + validate PAR1 magic
+    const buf = await resp.arrayBuffer();
+    if (buf.byteLength < 8) return warnings;
+
+    const magic = new Uint8Array(buf, 4, 4);
+    if (magic[0] !== 0x50 || magic[1] !== 0x41 || magic[2] !== 0x52 || magic[3] !== 0x31) {
+      return warnings; // Not a valid Parquet file — let DuckDB handle the error later
+    }
+
+    const footerSize = new DataView(buf).getUint32(0, true);
+
+    if (footerSize > 1 * 1024 * 1024) {
+      warnings.push({
+        icon: 'mdi-file-outline',
+        title: `Large Parquet footer (${(footerSize / 1024 / 1024).toFixed(1)} MB)`,
+        detail:
+          'Reading the schema and metadata will require downloading the entire footer — this may take a while.'
+      });
+    }
+
+    if (fileSize && fileSize > 5 * 1024 * 1024 * 1024) {
+      warnings.push({
+        icon: 'mdi-harddisk',
+        title: `Very large file (${(fileSize / 1024 / 1024 / 1024).toFixed(1)} GB)`,
+        detail:
+          'Queries may require significant downloads. Consider using viewport filtering to load only visible data.'
+      });
+    }
+  } catch {
+    clearTimeout(timer);
+    // Health check is best-effort — don't block loading on failure.
+  }
+  return warnings;
+}
+
+/**
  * Map raw DuckDB/WASM/network errors to user-friendly messages.
  * Returns { title, detail, suggestion }.
  */

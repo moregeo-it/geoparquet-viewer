@@ -87,6 +87,22 @@
             style="max-width: 280px"
           />
         </template>
+
+        <!-- Inline warnings -->
+        <template v-if="loadWarnings.length > 0">
+          <v-divider class="my-4" />
+          <v-alert
+            v-for="(w, i) in loadWarnings"
+            :key="i"
+            :type="w.type"
+            :icon="w.icon"
+            variant="tonal"
+            density="compact"
+            class="mb-2 text-body-2"
+          >
+            {{ w.text }}
+          </v-alert>
+        </template>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -112,7 +128,8 @@ export default {
     schema: { type: Array, default: () => [] },
     geoColumns: { type: Array, default: () => [] },
     totalRows: { type: Number, default: -1 },
-    defaults: { type: Object, default: () => ({}) }
+    defaults: { type: Object, default: () => ({}) },
+    columnSizes: { type: Object, default: null }
   },
   emits: ['update:modelValue', 'apply', 'cancel'],
   data() {
@@ -162,7 +179,7 @@ export default {
       values.sort((a, b) => a - b);
 
       return values.map((value) => {
-        const parts = [value.toLocaleString()]; //
+        const parts = [value.toLocaleString()];
 
         if (value === this.defaults.pageSize) {
           parts.push('default');
@@ -176,6 +193,66 @@ export default {
 
         return { value, title: parts.join(' — ') };
       });
+    },
+    /** Inline warnings based on current selection */
+    loadWarnings() {
+      const warnings = [];
+      const rgs = this.defaults.rowGroupSize;
+      const numRowGroups = this.defaults.numRowGroups;
+
+      // Row group size warning
+      if (rgs && rgs > 100000) {
+        warnings.push({
+          icon: 'mdi-table-row',
+          type: 'info',
+          text: `Row group size is ${rgs.toLocaleString()} rows — each page load will fetch at least one full row group.`
+        });
+      }
+
+      // Number of columns warning
+      if (this.localSelectedColumns.length > 50) {
+        warnings.push({
+          icon: 'mdi-table-column',
+          type: 'warning',
+          text: `${this.localSelectedColumns.length} columns selected — consider selecting fewer for faster loading.`
+        });
+      }
+
+      // Column compressed size warning
+      if (this.columnSizes && this.localSelectedColumns.length > 0) {
+        const totalBytes = this.selectedColumnsSize;
+        if (totalBytes > 10 * 1024 * 1024) {
+          warnings.push({
+            icon: 'mdi-weight',
+            type: 'warning',
+            text: `Selected columns total ~${(totalBytes / 1024 / 1024).toFixed(1)} MB compressed per row group — loading may be slow.`
+          });
+        }
+      }
+
+      // Many row groups warning
+      if (numRowGroups && numRowGroups > 1000) {
+        warnings.push({
+          icon: 'mdi-layers-outline',
+          type: 'info',
+          text: `File has ${numRowGroups.toLocaleString()} row groups — initial metadata parsing may be slow.`
+        });
+      }
+
+      return warnings;
+    },
+    /** Sum of compressed sizes for currently selected columns (first row group) */
+    selectedColumnsSize() {
+      if (!this.columnSizes) return 0;
+      let total = 0;
+      for (const name of this.localSelectedColumns) {
+        total += this.columnSizes[name] || 0;
+      }
+      // Always include geo column
+      for (const geoCol of this.geoColumns) {
+        total += this.columnSizes[geoCol] || 0;
+      }
+      return total;
     }
   },
   watch: {
