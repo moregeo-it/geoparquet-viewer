@@ -15,6 +15,7 @@
           placeholder="https://example.com/data.parquet"
           density="compact"
           variant="outlined"
+          clearable
           hide-details
           @keydown.enter="submit"
         />
@@ -47,7 +48,9 @@
       <v-card-actions>
         <v-spacer />
         <v-btn @click="$emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" @click="submit">Load</v-btn>
+        <v-btn color="primary" variant="flat" :disabled="!newUrl && !selectedFile" @click="submit"
+          >Load</v-btn
+        >
       </v-card-actions>
     </v-card>
   </v-dialog>
