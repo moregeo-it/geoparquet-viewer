@@ -173,11 +173,10 @@ import {
 } from './db.js';
 import {
   buildGeoArrowTables,
-  formatValue,
   toBinary,
   findGeoColumn
 } from '@walkthru-earth/objex-utils';
-import { friendlyError } from './utils.js';
+import Utils, { DEFAULT_PAGE_SIZE } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -200,18 +199,6 @@ import KvMetadataModal, {
 import { startConversion } from './converter.js';
 import { shallowRef } from 'vue';
 
-const DEFAULT_PAGE_SIZE = 10000;
-
-function normalizeDisplayValue(value) {
-  if (value === null || value === undefined) return value;
-  if (ArrayBuffer.isView(value)) return `[binary ${value.byteLength}B]`;
-  return formatValue(value);
-}
-
-function getDefaultUrl() {
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get('url') || null;
-}
 
 export default {
   name: 'App',
@@ -533,7 +520,7 @@ export default {
     }
   },
   mounted() {
-    const url = getDefaultUrl();
+    const url = Utils.getDefaultUrl();
     if (url) {
       this.loadFromUrl(url);
     } else {
@@ -556,7 +543,7 @@ export default {
 
     setError(err) {
       this.statusMessage = '';
-      const info = friendlyError(err);
+      const info = Utils.friendlyError(err);
       const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
       this.$snotify.error(body, info.title, { timeout: 0, closeOnClick: true });
     },
@@ -583,7 +570,7 @@ export default {
             .catch((err) => {
               this.loading = false;
               console.error(err);
-              const info = friendlyError(err);
+              const info = Utils.friendlyError(err);
               reject(err);
               throw {
                 title: info.title,
@@ -815,7 +802,7 @@ export default {
         // ── Build table row ────────────────────────────────
         const row = { __index: globalIndex };
         for (let c = 0; c < displayCols.length; c++) {
-          row[displayCols[c].name] = normalizeDisplayValue(displayCols[c].vector.get(i));
+          row[displayCols[c].name] = Utils.normalizeDisplayValue(displayCols[c].vector.get(i));
         }
         newRows.push(row);
 
@@ -970,7 +957,7 @@ export default {
               config: { timeout: 5000, closeOnClick: true, buttons: [] }
             }))
             .catch((err) => {
-              const info = friendlyError(err);
+              const info = Utils.friendlyError(err);
               throw {
                 title: info.title || 'Conversion failed',
                 body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
