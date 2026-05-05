@@ -1,4 +1,4 @@
-import { formatValue } from "@walkthru-earth/objex-utils";
+import { formatValue } from '@walkthru-earth/objex-utils';
 
 export const DEFAULT_PAGE_SIZE = 10000;
 

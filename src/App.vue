@@ -174,11 +174,7 @@ import {
   queryCount,
   transformBbox
 } from './db.js';
-import {
-  buildGeoArrowTables,
-  toBinary,
-  findGeoColumn
-} from '@walkthru-earth/objex-utils';
+import { buildGeoArrowTables, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
 import Utils, { DEFAULT_PAGE_SIZE } from './utils.js';
 
 import MapView from './components/MapView.vue';
@@ -201,7 +197,6 @@ import KvMetadataModal, {
 
 import { startConversion } from './converter.js';
 import { shallowRef } from 'vue';
-
 
 export default {
   name: 'App',
