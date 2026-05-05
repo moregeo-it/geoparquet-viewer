@@ -3,7 +3,6 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     width="auto"
-    max-width="520"
     persistent
   >
     <v-card>
