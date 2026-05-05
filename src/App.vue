@@ -67,6 +67,9 @@
               :loading="loading"
               :is-dark="isDark"
               :bbox="reprojectedBbox"
+              :initial-center="urlInit?.center"
+              :initial-zoom="urlInit?.zoom"
+              :skip-initial-fit="!!urlInit?.viewportFilter"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -520,9 +523,16 @@ export default {
     }
   },
   mounted() {
-    const url = Utils.getDefaultUrl();
-    if (url) {
-      this.loadFromUrl(url);
+    // Parse URL state once — frozen object, never mutated after this.
+    const urlState = Utils.parseUrlState();
+    this.urlInit = urlState;
+
+    // Non-reactive map position (updated by onViewportChange, read by syncUrl)
+    this.mapCenter = urlState.center || null;
+    this.mapZoom = urlState.zoom ?? null;
+
+    if (urlState.url) {
+      this.loadFromUrl(urlState.url);
     } else {
       this.loadDialogOpen = true;
     }
@@ -584,25 +594,25 @@ export default {
 
     // ── Data loading ──────────────────────────────────────
     async loadFromUrl(url) {
-      history.pushState({}, '', `?url=${encodeURIComponent(url)}`);
       this.reset();
       this.source = url;
       this.displaySource = url;
+      this.syncUrl();
       await this.loadData();
     },
 
     async loadFromFile(file) {
-      history.pushState({}, '', window.location.pathname);
       this.reset();
       const name = 'local_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       this.source = name;
+      this.localFileName = name;
       this.displaySource = file.name;
+      this.syncUrl();
       this.loading = true;
       this.setStatus(`Reading file ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...`);
       try {
         const buffer = await file.arrayBuffer();
         await registerLocalFile(name, buffer);
-        this.localFileName = name;
         this.localFileBuffer = buffer;
         await this.loadData();
       } catch (e) {
@@ -665,9 +675,18 @@ export default {
         this.rowGroupSize = meta.rowGroupSize;
 
         // Pause: let the user choose columns, page size, etc.
+        // If URL already had settings, auto-apply them (skip modal).
         this.statusMessage = '';
         this.loading = false;
-        this.querySettingsOpen = true;
+        const init = this.urlInit;
+        if (init?.columns || init?.pageSize) {
+          this.applyQuerySettings({
+            selectedColumns: init.columns,
+            pageSize: init.pageSize || DEFAULT_PAGE_SIZE
+          });
+        } else {
+          this.querySettingsOpen = true;
+        }
       } catch (e) {
         console.error('Load error:', e);
         this.setError(e);
@@ -678,6 +697,7 @@ export default {
     applyQuerySettings(settings) {
       this.selectedColumns = settings.selectedColumns;
       this.pageSize = settings.pageSize;
+      this.syncUrl();
 
       // Clear any previous data (relevant when re-opening settings)
       this.rows = [];
@@ -689,6 +709,23 @@ export default {
       this.filteredCount = null;
       this.filters = [];
 
+      // If URL says viewport filtering was active, skip the full query —
+      // load only viewport data. If bounds are already available (map loaded
+      // before metadata finished), trigger immediately. Otherwise wait for
+      // the map's first viewportChange event.
+      if (this.urlInit?.viewportFilter && this.hasBboxCovering) {
+        if (this.viewportBounds) {
+          this.urlInit = null;
+          this.reloadForViewport();
+        } else {
+          this.loading = true;
+          this.setStatus('Waiting for map viewport...');
+        }
+        return;
+      }
+      // URL init consumed — clear so subsequent applyQuerySettings calls are normal
+      this.urlInit = null;
+
       this._runTask('Loading data...', async () => {
         await this.executeQuery(0);
         return `Loaded ${this.loadedCount.toLocaleString()} of ${this.totalRows.toLocaleString()} rows.`;
@@ -697,6 +734,26 @@ export default {
 
     reopenQuerySettings() {
       this.querySettingsOpen = true;
+    },
+
+    /**
+     * Sync current state to URL query params (replaceState — no navigation).
+     */
+    syncUrl() {
+      Utils.syncUrlParams({
+        url: this.localFileName ? null : this.source,
+        columns: this.selectedColumns,
+        pageSize: this.pageSize,
+        center: this.mapCenter,
+        zoom: this.mapZoom,
+        viewportFilter: this.viewportActive || this.viewportStale
+      });
+    },
+
+    /** Debounced version — used by viewport changes to avoid flooding replaceState. */
+    debouncedSyncUrl() {
+      if (this._syncUrlTimer) clearTimeout(this._syncUrlTimer);
+      this._syncUrlTimer = setTimeout(() => this.syncUrl(), 300);
     },
 
     onQuerySettingsCancel() {
@@ -867,8 +924,21 @@ export default {
     },
 
     // ── Viewport-driven spatial filtering ──────────────────
-    onViewportChange(bbox) {
+    onViewportChange({ bbox, center, zoom }) {
       this.viewportBounds = bbox;
+      this.mapCenter = center;
+      this.mapZoom = zoom;
+      this.debouncedSyncUrl();
+
+      // Auto-reload viewport on initial load when URL had viewport=1
+      if (this.urlInit?.viewportFilter && this.hasBboxCovering) {
+        this.urlInit = null;
+        this.loading = false;
+        this.statusMessage = '';
+        this.reloadForViewport();
+        return;
+      }
+
       if (!this.source || !this.hasBboxCovering) return;
       // Mark viewport as stale — user decides when to reload.
       if (this.rows.length > 0) {
@@ -879,6 +949,7 @@ export default {
     reloadForViewport() {
       this.viewportStale = false;
       this.viewportActive = true;
+      this.syncUrl();
       const gen = ++this.viewportGeneration;
       this.rows = [];
       this.geoArrowResults = [];

@@ -40,7 +40,10 @@ export default {
     viewportStale: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
     isDark: { type: Boolean, default: false },
-    bbox: { type: Array, default: null }
+    bbox: { type: Array, default: null },
+    initialCenter: { type: Array, default: null },
+    initialZoom: { type: Number, default: null },
+    skipInitialFit: { type: Boolean, default: false }
   },
   emits: ['select', 'viewportChange', 'reloadViewport'],
   data() {
@@ -48,7 +51,8 @@ export default {
       map: null,
       overlay: null,
       ready: false,
-      moveEndTimer: null
+      moveEndTimer: null,
+      hasFittedOnce: false
     };
   },
   created() {
@@ -118,8 +122,8 @@ export default {
             }
           ]
         },
-        center: [0, 20],
-        zoom: 2,
+        center: this.initialCenter || [0, 20],
+        zoom: this.initialZoom ?? 2,
         attributionControl: true
       });
 
@@ -133,6 +137,8 @@ export default {
         this.updateLayers();
         this.updateBboxLayer();
         if (this.bounds) this.fitBounds();
+        // Emit initial viewport so App can trigger viewport-filtered loading
+        this.emitViewport();
       });
 
       // Emit viewport bounds on pan/zoom (debounced 400 ms)
@@ -146,7 +152,13 @@ export default {
     emitViewport() {
       if (!this.map) return;
       const b = this.map.getBounds();
-      this.$emit('viewportChange', [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      const center = this.map.getCenter();
+      const zoom = this.map.getZoom();
+      this.$emit('viewportChange', {
+        bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+        center: [center.lng, center.lat],
+        zoom
+      });
     },
 
     updateLayers() {
@@ -268,6 +280,13 @@ export default {
 
     fitBounds() {
       if (!this.bounds || !this.map) return;
+      // Skip fitBounds only when viewport-filtered mode was active (viewport=1 in URL).
+      // For regular shared URLs, always fit to data extent.
+      if (this.skipInitialFit && !this.hasFittedOnce) {
+        this.hasFittedOnce = true;
+        return;
+      }
+      this.hasFittedOnce = true;
       // Validate bounds are finite numbers before calling fitBounds.
       const [[w, s], [e, n]] = this.bounds;
       if (!isFinite(w) || !isFinite(s) || !isFinite(e) || !isFinite(n)) return;
