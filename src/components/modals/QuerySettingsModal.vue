@@ -137,7 +137,7 @@ export default {
     },
     /** Build page size options dynamically based on rowGroupSize */
     defaultPageSize() {
-      return Math.min(this.defaults.pageSize, this.totalRows);
+      return Math.min(Math.min(this.defaults.pageSize, this.totalRows), this.defaults.rowGroupSize);
     },
     pageSizeOptions() {
       const rgs = this.defaults.rowGroupSize ?? null;
@@ -164,7 +164,7 @@ export default {
       return values.map((value) => {
         const parts = [value.toLocaleString()]; //
 
-        if (value === this.defaults.pageSize) {
+        if (value === this.defaultPageSize) {
           parts.push('default');
         }
         if (value === rgs) {
