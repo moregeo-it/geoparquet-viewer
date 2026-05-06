@@ -72,23 +72,23 @@ export default {
           title: 'Airports (< 1 MB, points)'
         },
         {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
+          url: 'https://data.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
           title: 'Energy performance certificates in Wolverhampton, UK (2 MB, polygons)'
         },
         {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
+          url: 'https://data.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
           title: 'Field boundaries for North Rhine-Westphalia, Germany (254 MB, polygons)'
         },
         {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/henryspatialanalysis/openpois/latest/osm-parquet/primary_tag=leisure/part-0.parquet',
+          url: 'https://data.source.coop/henryspatialanalysis/openpois/latest/osm-parquet/primary_tag=leisure/part-0.parquet',
           title: 'Open POIs with leisure tag in the US (430 MB, points)'
         },
         {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/japan/japan.parquet',
+          url: 'https://data.source.coop/fiboa/japan/japan.parquet',
           title: 'Field boundaries for Japan (4.5 GB, polygons)'
         },
         {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IND/IND.parquet',
+          url: 'https://data.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IND/IND.parquet',
           title: 'Open buildings in India (60 GB, polygons)'
         }
       ]
