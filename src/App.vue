@@ -69,7 +69,7 @@
               :bbox="reprojectedBbox"
               :initial-center="urlInit?.center"
               :initial-zoom="urlInit?.zoom"
-              :skip-initial-fit="!!urlInit?.viewportFilter"
+              :skip-initial-fit="skipInitialFit"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -405,6 +405,10 @@ export default {
       return this.$vuetify.display.smAndDown;
     },
 
+    skipInitialFit() {
+      return !!this.urlInit?.viewportFilter && !!this.urlInit?.center && !!this.urlInit?.zoom;
+    },
+
     /** True only during the very first load (no schema yet) */
 
     initialLoading() {
@@ -638,6 +642,8 @@ export default {
       this.rows = [];
       this.geoArrowResults = [];
       this.mapBounds = null;
+      this.mapZoom = null;
+      this.mapCenter = null;
       this.wkbByIndex = {};
       this.mapFeatureCount = 0;
       this.selectedIndex = null;
