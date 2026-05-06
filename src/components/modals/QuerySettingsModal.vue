@@ -127,6 +127,7 @@ export default {
     modelValue: { type: Boolean, default: false },
     schema: { type: Array, default: () => [] },
     geoColumns: { type: Array, default: () => [] },
+    primaryGeoColumn: { type: String, default: null },
     totalRows: { type: Number, default: -1 },
     defaults: { type: Object, default: () => ({}) },
     columnSizes: { type: Object, default: null }
@@ -249,8 +250,8 @@ export default {
         total += this.columnSizes[name] || 0;
       }
       // Always include geo column
-      for (const geoCol of this.geoColumns) {
-        total += this.columnSizes[geoCol] || 0;
+      if (this.primaryGeoColumn) {
+        total += this.columnSizes[this.primaryGeoColumn] || 0;
       }
       return total;
     }

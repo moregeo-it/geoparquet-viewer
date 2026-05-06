@@ -147,6 +147,7 @@
       v-model="querySettingsOpen"
       :schema="schema || []"
       :geo-columns="geoColumns"
+      :primary-geo-column="primaryGeoColumn"
       :total-rows="totalRows"
       :defaults="querySettingsDefaults"
       :column-sizes="columnSizes"
