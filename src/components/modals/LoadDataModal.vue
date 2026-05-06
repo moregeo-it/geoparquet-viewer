@@ -114,7 +114,6 @@ export default {
       if (file) {
         this.selectedFile = file;
         this.newUrl = '';
-        this.submit();
       }
     },
     submit() {
