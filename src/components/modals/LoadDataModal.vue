@@ -107,12 +107,14 @@ export default {
     selectExample(url) {
       this.newUrl = url;
       this.selectedFile = null;
+      this.submit();
     },
     onFileSelect(files) {
       const file = Array.isArray(files) ? files[0] : files;
       if (file) {
         this.selectedFile = file;
         this.newUrl = '';
+        this.submit();
       }
     },
     submit() {
