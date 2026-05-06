@@ -3,6 +3,7 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     width="auto"
+    scrollable
   >
     <v-card>
       <v-card-title class="d-flex align-center">
