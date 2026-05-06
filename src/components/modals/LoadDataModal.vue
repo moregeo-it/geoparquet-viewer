@@ -17,7 +17,7 @@
           variant="outlined"
           clearable
           hide-details
-          @keydown.enter="submit"
+          @keydown.enter="(newUrl || selectedFile) && submit()"
         />
 
         <h3 class="text-subtitle-1 font-weight-bold mt-4 mb-2">From local file</h3>
