@@ -57,7 +57,7 @@
         <v-divider />
         <h4 class="text-subtitle-2 font-weight-bold pa-3 pb-1">Row Groups</h4>
         <v-expansion-panels v-model="openPanel" variant="accordion">
-          <v-expansion-panel v-for="(group, i) in rowGroups" :key="group.id" :value="i">
+          <v-expansion-panel v-for="(group, i) in visibleGroups" :key="group.id" :value="i">
             <v-expansion-panel-title>
               <strong>Row Group {{ group.id }}</strong>
               <span class="ml-2 text-caption text-grey">
@@ -102,6 +102,11 @@
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
+        <div v-if="visibleCount < rowGroups.length" class="text-center pa-3">
+          <v-btn variant="tonal" size="small" @click="visibleCount += PAGE_SIZE">
+            Load more ({{ rowGroups.length - visibleCount }} remaining)
+          </v-btn>
+        </div>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -123,10 +128,15 @@ export default {
       loading: false,
       error: null,
       stats: null,
-      openPanel: null
+      openPanel: null,
+      visibleCount: 20,
+      PAGE_SIZE: 20,
     };
   },
   computed: {
+    visibleGroups() {
+      return this.rowGroups.slice(0, this.visibleCount);
+    },
     rowGroups() {
       if (!this.stats) return [];
       const groups = new Map();
