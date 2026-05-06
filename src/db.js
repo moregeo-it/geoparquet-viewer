@@ -218,7 +218,7 @@ function geomExpr(geoColumn, alreadyGeometry) {
  *
  * @param {string} source - Parquet source path.
  * @param {Function} onProgress - Status callback.
- * @returns {Promise<{schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema}>}
+ * @returns {Promise<{schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema, columnSizes}>}
  */
 export async function bootstrapMetadata(source, onProgress = () => {}) {
   const escaped = escapeSource(source);
