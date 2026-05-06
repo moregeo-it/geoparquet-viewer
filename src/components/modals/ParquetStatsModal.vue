@@ -103,7 +103,7 @@
           </v-expansion-panel>
         </v-expansion-panels>
         <div v-if="visibleCount < rowGroups.length" class="text-center pa-3">
-          <v-btn variant="tonal" size="small" @click="visibleCount += PAGE_SIZE">
+          <v-btn variant="tonal" size="small" @click="loadMore">
             Load more ({{ rowGroups.length - visibleCount }} remaining)
           </v-btn>
         </div>
@@ -212,6 +212,7 @@ export default {
     source() {
       this.stats = null;
       this.openPanel = null;
+      this.visibleCount = this.PAGE_SIZE;
       if (this.modelValue) {
         this.fetchStats();
       }
@@ -239,6 +240,9 @@ export default {
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    },
+    loadMore() {
+      this.visibleCount = Math.min(this.visibleCount + this.PAGE_SIZE, this.rowGroups.length);
     }
   }
 };
