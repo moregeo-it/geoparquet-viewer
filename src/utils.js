@@ -26,7 +26,7 @@ export default class Utils {
  * @param {string} url - Remote URL of the Parquet file.
  * @param {object} [options]
  * @param {number} [options.timeout=5000] - Abort if fetch takes longer (ms).
- * @returns {Promise<{warnings: Array}>} Array of warning objects (empty = no issues).
+ * @returns {Promise<Array<object>>} Array of warning objects (empty = no issues).
  */
 export async function checkFileHealth(url, { timeout = 5000 } = {}) {
   const warnings = [];
@@ -41,7 +41,7 @@ export async function checkFileHealth(url, { timeout = 5000 } = {}) {
     });
     clearTimeout(timer);
 
-    if (!resp.ok && resp.status !== 206) return warnings;
+    if (resp.status !== 206) return warnings;
 
     // Parse file size from Content-Range header
     let fileSize = null;
@@ -53,7 +53,7 @@ export async function checkFileHealth(url, { timeout = 5000 } = {}) {
 
     // Read footer length (4 bytes LE) + validate PAR1 magic
     const buf = await resp.arrayBuffer();
-    if (buf.byteLength < 8) return warnings;
+    if (buf.byteLength < 8 || buf.byteLength > 8) return warnings;
 
     const magic = new Uint8Array(buf, 4, 4);
     if (magic[0] !== 0x50 || magic[1] !== 0x41 || magic[2] !== 0x52 || magic[3] !== 0x31) {
