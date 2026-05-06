@@ -130,7 +130,7 @@ export default {
       stats: null,
       openPanel: null,
       visibleCount: 20,
-      PAGE_SIZE: 20,
+      PAGE_SIZE: 20
     };
   },
   computed: {
