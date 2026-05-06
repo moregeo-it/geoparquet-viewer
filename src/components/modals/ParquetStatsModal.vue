@@ -56,8 +56,19 @@
         </v-table>
         <v-divider />
         <h4 class="text-subtitle-2 font-weight-bold pa-3 pb-1">Row Groups</h4>
+
+        <!-- Top pagination -->
+        <v-pagination
+          v-if="totalPages > 1"
+          v-model="currentPage"
+          :length="totalPages"
+          :total-visible="totalVisible"
+          density="compact"
+          class="my-2"
+        />
+
         <v-expansion-panels v-model="openPanel" variant="accordion">
-          <v-expansion-panel v-for="(group, i) in visibleGroups" :key="group.id" :value="i">
+          <v-expansion-panel v-for="group in pagedGroups" :key="group.id" :value="group.id">
             <v-expansion-panel-title>
               <strong>Row Group {{ group.id }}</strong>
               <span class="ml-2 text-caption text-grey">
@@ -65,7 +76,7 @@
               </span>
             </v-expansion-panel-title>
             <v-expansion-panel-text>
-              <v-table v-if="openPanel === i" density="compact" class="stats-table">
+              <v-table v-if="openPanel === group.id" density="compact" class="stats-table">
                 <thead>
                   <tr>
                     <th>Column</th>
@@ -102,11 +113,16 @@
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
-        <div v-if="visibleCount < rowGroups.length" class="text-center pa-3">
-          <v-btn variant="tonal" size="small" @click="loadMore">
-            Load more ({{ rowGroups.length - visibleCount }} remaining)
-          </v-btn>
-        </div>
+
+        <!-- Bottom pagination -->
+        <v-pagination
+          v-if="totalPages > 1"
+          v-model="currentPage"
+          :length="totalPages"
+          :total-visible="totalVisible"
+          density="compact"
+          class="my-2"
+        />
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -115,6 +131,8 @@
 <script>
 import { markRaw } from 'vue';
 import { queryParquetStats } from '../../db';
+
+const PAGE_SIZE = 50;
 
 export default {
   name: 'ParquetStatsModal',
@@ -129,18 +147,69 @@ export default {
       error: null,
       stats: null,
       openPanel: null,
-      visibleCount: 20,
-      PAGE_SIZE: 20
+      currentPage: 1,
+      rowGroupsCache: null,
+      columnSummaryCache: null
     };
   },
   computed: {
-    visibleGroups() {
-      return this.rowGroups.slice(0, this.visibleCount);
-    },
     rowGroups() {
-      if (!this.stats) return [];
+      return this.rowGroupsCache ?? [];
+    },
+    columnSummary() {
+      return this.columnSummaryCache ?? [];
+    },
+    totalPages() {
+      return Math.ceil(this.rowGroups.length / PAGE_SIZE);
+    },
+    pagedGroups() {
+      const start = (this.currentPage - 1) * PAGE_SIZE;
+      return this.rowGroups.slice(start, start + PAGE_SIZE);
+    },
+    totalVisible() {
+      return this.totalPages > 10 ? 10 : this.totalPages;
+    }
+  },
+  watch: {
+    modelValue(open) {
+      if (open) {
+        this.currentPage = 1;
+        this.openPanel = null;
+        if (!this.stats && !this.loading) this.fetchStats();
+      }
+    },
+    source() {
+      this.stats = null;
+      this.openPanel = null;
+      this.currentPage = 1;
+      this.rowGroupsCache = null;
+      this.columnSummaryCache = null;
+      if (this.modelValue) this.fetchStats();
+    },
+    // Close open panel when user navigates to a different page,
+    // since the previously open group.id won't exist in pagedGroups anymore.
+    currentPage() {
+      this.openPanel = null;
+    }
+  },
+  methods: {
+    async fetchStats() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const raw = await queryParquetStats(this.source);
+        this.stats = markRaw(raw);
+        this.rowGroupsCache = markRaw(this.buildRowGroups(raw));
+        this.columnSummaryCache = markRaw(this.buildColumnSummary(raw));
+      } catch (e) {
+        this.error = `Failed to load column statistics: ${e.message}`;
+      } finally {
+        this.loading = false;
+      }
+    },
+    buildRowGroups(stats) {
       const groups = new Map();
-      for (const row of this.stats) {
+      for (const row of stats) {
         const id = row.row_group_id;
         if (!groups.has(id)) {
           groups.set(id, { id, numRows: row.row_group_num_rows, columns: [] });
@@ -149,10 +218,9 @@ export default {
       }
       return [...groups.values()];
     },
-    columnSummary() {
-      if (!this.stats) return [];
+    buildColumnSummary(stats) {
       const map = new Map();
-      for (const row of this.stats) {
+      for (const row of stats) {
         const name = row.path_in_schema;
         if (!map.has(name)) {
           map.set(name, {
@@ -201,34 +269,6 @@ export default {
         totalCompressed: agg.totalCompressed,
         totalUncompressed: agg.totalUncompressed
       }));
-    }
-  },
-  watch: {
-    modelValue(open) {
-      if (open && !this.stats && !this.loading) {
-        this.fetchStats();
-      }
-    },
-    source() {
-      this.stats = null;
-      this.openPanel = null;
-      this.visibleCount = this.PAGE_SIZE;
-      if (this.modelValue) {
-        this.fetchStats();
-      }
-    }
-  },
-  methods: {
-    async fetchStats() {
-      this.loading = true;
-      this.error = null;
-      try {
-        this.stats = markRaw(await queryParquetStats(this.source));
-      } catch (e) {
-        this.error = `Failed to load column statistics: ${e.message}`;
-      } finally {
-        this.loading = false;
-      }
     },
     formatStat(val) {
       if (val == null) return '—';
@@ -240,9 +280,6 @@ export default {
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    },
-    loadMore() {
-      this.visibleCount = Math.min(this.visibleCount + this.PAGE_SIZE, this.rowGroups.length);
     }
   }
 };
