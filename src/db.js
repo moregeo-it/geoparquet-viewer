@@ -172,7 +172,7 @@ export function escapeSource(source) {
  */
 export async function getSchema(source) {
   const escaped = escapeSource(source);
-  const result = await query(`DESCRIBE SELECT * FROM '${escaped}'`);
+  const result = await query(`DESCRIBE SELECT * FROM read_parquet('${escaped}')`);
   return result.toArray().map((row) => ({
     name: String(row.column_name),
     type: String(row.column_type),
@@ -285,7 +285,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   } catch (e) {
     console.warn('parquet_file_metadata failed, falling back to COUNT(*):', e.message);
     try {
-      const countResult = await query(`SELECT COUNT(*) as cnt FROM '${escaped}'`);
+      const countResult = await query(`SELECT COUNT(*) as cnt FROM read_parquet('${escaped}')`);
       totalRows = Number(countResult.toArray()[0].cnt);
     } catch {
       /* leave as -1 */
