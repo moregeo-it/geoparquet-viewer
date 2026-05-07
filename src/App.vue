@@ -547,6 +547,13 @@ export default {
     }
   },
   mounted() {
+    // Eagerly start DuckDB init in the background so WASM download + extension
+    // loading is already in-flight before the user picks a file/URL.
+    // No progress shown here — loadData() registers a listener if init is still running.
+    initDB().catch((e) => {
+      console.error('DuckDB init failed:', e);
+    });
+
     const url = getDefaultUrl();
     if (url) {
       this.loadFromUrl(url);
@@ -706,7 +713,6 @@ export default {
     async loadData() {
       this.loading = true;
       try {
-        this.setStatus('Initializing DuckDB...');
         await initDB((msg) => this.setStatus(msg));
 
         // Single bootstrap: schema + row count + row group size + KV/geo/file metadata.

@@ -16,21 +16,36 @@ let _db = null;
 let _conn = null;
 let _spatialLoaded = false;
 let _initPromise = null;
+let _lastProgressMsg = null;
 
 // Cache: source → { geoColumn → boolean } for isGeometryType results.
 // Avoids repeated DESCRIBE queries on every queryData/queryCount call.
 const _geomTypeCache = new Map();
 
+const _progressListeners = new Set();
+
+function _emitProgress(msg) {
+  _lastProgressMsg = msg; // Cache last message for late-joining listeners during init.
+  for (const fn of _progressListeners) fn(msg); // Emit to all listeners.
+}
+
 /**
  * Initialize DuckDB-WASM with required extensions.
  * WASM bundles are self-hosted (no external CDN dependency).
  */
-export async function initDB(onProgress = () => {}) {
-  if (_db) return { db: _db, conn: _conn };
+export async function initDB(onProgress) {
+  if (_db && _conn) return { db: _db, conn: _conn };
+
+  // Register late-joining progress listener so callers see remaining init steps.
+  if (onProgress) {
+    _progressListeners.add(onProgress);
+    if (_lastProgressMsg) onProgress(_lastProgressMsg);
+  }
+
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    onProgress('Starting DuckDB...');
+    _emitProgress('Starting DuckDB...');
 
     // Always use EH (exception handling) bundle — required for spatial/PROJ operations.
     const mainModule = duckdb_wasm_eh;
@@ -41,7 +56,7 @@ export async function initDB(onProgress = () => {}) {
     _db = new duckdb.AsyncDuckDB(logger, worker);
     await _db.instantiate(mainModule);
 
-    onProgress('Opening database...');
+    _emitProgress('Opening database...');
     try {
       await _db.open({
         query: {
@@ -57,34 +72,45 @@ export async function initDB(onProgress = () => {}) {
 
     // Workaround for DuckDB-WASM PROJ initialization timing issue (#2199):
     // Load coordinate system data BEFORE loading spatial extension.
-    onProgress('Preloading coordinate systems...');
+    _emitProgress('Preloading coordinate systems...');
     try {
       await _conn.query(`SELECT * FROM duckdb_coordinate_systems()`);
     } catch (e) {
       console.warn('Could not preload coordinate systems:', e.message);
     }
 
-    onProgress('Loading httpfs extension...');
+    _emitProgress('Loading httpfs extension...');
     try {
       await _conn.query(`INSTALL httpfs`);
       await _conn.query(`LOAD httpfs`);
-      onProgress('httpfs extension loaded.');
+      _emitProgress('httpfs extension loaded.');
     } catch (e) {
       console.warn('httpfs extension not available:', e.message);
-      onProgress('httpfs extension unavailable — HTTP sources will not work.');
+      _emitProgress('httpfs extension unavailable — HTTP sources will not work.');
     }
 
-    onProgress('Loading spatial extension...');
+    _emitProgress('Loading spatial extension...');
     try {
       await _conn.query(`INSTALL spatial`);
       await _conn.query(`LOAD spatial`);
       _spatialLoaded = true;
-      onProgress('Spatial extension loaded.');
+      _emitProgress('Spatial extension loaded.');
     } catch (e) {
       console.warn('Spatial extension not available:', e.message);
-      onProgress('Spatial extension unavailable — using client-side WKB parsing.');
+      _emitProgress('Spatial extension unavailable — using client-side WKB parsing.');
     }
 
+    _emitProgress('Loading parquet extension...');
+    try {
+      await _conn.query(`INSTALL parquet`);
+      await _conn.query(`LOAD parquet`);
+      _emitProgress('Parquet extension loaded.');
+    } catch (e) {
+      console.warn('Parquet extension not available:', e.message);
+      _emitProgress('Parquet extension unavailable — using client-side Parquet parsing.');
+    }
+
+    _progressListeners.clear();
     return { db: _db, conn: _conn };
   })();
 
