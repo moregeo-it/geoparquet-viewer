@@ -24,9 +24,26 @@
           </span>
         </div>
 
+        <!-- Inline warnings -->
+        <template v-if="loadWarnings.length > 0">
+          <v-divider class="my-4" />
+          <v-alert
+            v-for="(w, i) in loadWarnings"
+            :key="i"
+            :type="w.type"
+            :icon="w.icon"
+            variant="tonal"
+            density="compact"
+            class="mb-2 text-body-2"
+          >
+            {{ w.text }}
+          </v-alert>
+        </template>
+
         <!-- Column picker -->
         <h3 class="text-subtitle-2 font-weight-bold mb-1">
-          Columns ({{ localSelectedColumns.length }}/{{ availableColumns.length }})
+          Columns ({{ localSelectedColumns.length }}/{{ availableColumns.length }} —
+          {{ formattedColumnsSize }})
         </h3>
         <p class="text-caption text-grey-darken-1 my-1">
           Select which columns to load and display. This is important as GeoParquet is a columnar
@@ -106,14 +123,18 @@
 </template>
 
 <script>
+import Utils from '@/utils';
+
 export default {
   name: 'QuerySettingsModal',
   props: {
     modelValue: { type: Boolean, default: false },
     schema: { type: Array, default: () => [] },
     geoColumns: { type: Array, default: () => [] },
+    primaryGeoColumn: { type: String, default: null },
     totalRows: { type: Number, default: -1 },
-    defaults: { type: Object, default: () => ({}) }
+    defaults: { type: Object, default: () => ({}) },
+    columnSizes: { type: Object, default: null }
   },
   emits: ['update:modelValue', 'apply', 'cancel'],
   data() {
@@ -163,7 +184,7 @@ export default {
       values.sort((a, b) => a - b);
 
       return values.map((value) => {
-        const parts = [value.toLocaleString()]; //
+        const parts = [value.toLocaleString()];
 
         if (value === this.defaultPageSize) {
           parts.push('default');
@@ -177,6 +198,98 @@ export default {
 
         return { value, title: parts.join(' — ') };
       });
+    },
+    /** Inline warnings based on current selection */
+    loadWarnings() {
+      const warnings = [];
+      const rgs = this.defaults.rowGroupSize;
+      const numRowGroups = this.defaults.numRowGroups;
+
+      // Recommended row group size for GeoParquet on the browser is between 50 and 150k rows, we choose the middle as our limit. See:
+      // https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md
+      const MAX_REC_PAGE_SIZE = 100000;
+      const MAX_REC_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB each for geometries and other columns
+      // Keep this intentionally small to avoid that users request too much data / hammer the server.
+      const MAX_REC_COLUMNS = 10;
+      // We recommend 10MB footer size, which with ~ 1KB of row group metaddata would result in 10k row groups.
+      // This makes the recommendations somewhat consistent.
+      const MAX_REC_ROW_GROUPS = 10000;
+
+      // Number of columns warning
+      if (this.localSelectedColumns.length > MAX_REC_COLUMNS) {
+        warnings.push({
+          icon: 'mdi-table-column',
+          type: 'warning',
+          text: `${this.localSelectedColumns.length} columns selected — consider selecting fewer for faster loading.`
+        });
+      }
+
+      // Geometry Column size warning
+      if (this.columnSizes && this.primaryGeoColumn) {
+        const geoColSize = this.rowGroupsLoading * this.selectedGeoColumnsSize;
+        if (geoColSize > MAX_REC_CHUNK_SIZE) {
+          warnings.push({
+            icon: 'mdi-weight',
+            type: 'info',
+            text: `The geometries require loading ~${Utils.formatBytes(geoColSize)} initially — loading the map may be slow.`
+          });
+        }
+      }
+
+      // Column compressed size warning
+      if (this.selectedTableSize > 0) {
+        const tableSize = this.rowGroupsLoading * this.selectedTableSize;
+        if (tableSize > MAX_REC_CHUNK_SIZE) {
+          warnings.push({
+            icon: 'mdi-weight',
+            type: 'warning',
+            text: `The selected columns require loading ~${Utils.formatBytes(tableSize)} initially — loading the table may be slow.`
+          });
+        }
+      }
+
+      // Row group size warning
+      if (rgs && rgs > MAX_REC_PAGE_SIZE) {
+        warnings.push({
+          icon: 'mdi-table-row',
+          type: 'info',
+          text: `Row group size is ${rgs.toLocaleString()} rows. Recommended size for web-optimized loading is under ${MAX_REC_PAGE_SIZE.toLocaleString()} rows.`
+        });
+      }
+
+      // Many row groups warning
+      if (numRowGroups && numRowGroups > MAX_REC_ROW_GROUPS) {
+        warnings.push({
+          icon: 'mdi-layers-outline',
+          type: 'info',
+          text: `File has ${numRowGroups.toLocaleString()} row groups — initial metadata parsing and row group/statistics loading may be slow.`
+        });
+      }
+
+      return warnings;
+    },
+    /** Sum of compressed sizes for currently selected columns (first row group) */
+    selectedTableSize() {
+      if (!this.columnSizes) return 0;
+      let total = 0;
+      for (const name of this.localSelectedColumns) {
+        total += this.columnSizes[name] || 0;
+      }
+      return total;
+    },
+    selectedGeoColumnsSize() {
+      if (this.columnSizes && this.primaryGeoColumn) {
+        return this.columnSizes[this.primaryGeoColumn] || 0;
+      }
+      return 0;
+    },
+    formattedColumnsSize() {
+      return Utils.formatBytes(
+        this.rowGroupsLoading * (this.selectedTableSize + this.selectedGeoColumnsSize)
+      );
+    },
+    rowGroupsLoading() {
+      return Math.ceil(this.localPageSize / this.defaults.rowGroupSize);
     }
   },
   watch: {
