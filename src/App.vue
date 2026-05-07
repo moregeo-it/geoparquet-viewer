@@ -751,7 +751,7 @@ export default {
         pageSize: this.pageSize,
         center: this.mapCenter,
         zoom: this.mapZoom,
-        bbox: (this.viewportActive || this.viewportStale) ? this.viewportBounds : null
+        bbox: this.viewportActive || this.viewportStale ? this.viewportBounds : null
       });
     },
 
@@ -895,7 +895,12 @@ export default {
       this.lastPageFull = limit ? numRows >= limit : false;
 
       // Set map bounds on first load (skip if already set, e.g. viewport reload)
-      if (offset === 0 && !this.mapBounds && !this._skipInitialFit && this.geoArrowResults.length > 0) {
+      if (
+        offset === 0 &&
+        !this.mapBounds &&
+        !this._skipInitialFit &&
+        this.geoArrowResults.length > 0
+      ) {
         const geoColMeta = this.geoMetadata?.columns?.[geoCol];
         if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
           const [minx, miny, maxx, maxy] = geoColMeta.bbox;
