@@ -50,13 +50,22 @@ export default class Utils {
       }
     }
 
+    let bbox = null;
+    const bboxParam = p.get('bbox');
+    if (bboxParam) {
+      const parts = bboxParam.split(',').map(Number);
+      if (parts.length === 4 && parts.every(Number.isFinite)) {
+        bbox = parts;
+      }
+    }
+
     return Object.freeze({
       url: p.get('url') || null,
       columns: columns && columns.length > 0 ? columns : null,
       pageSize: Number.isFinite(rawPageSize) && rawPageSize > 0 ? rawPageSize : null,
       center,
       zoom,
-      viewportFilter: p.get('viewport') === '1'
+      bbox
     });
   }
 
@@ -64,17 +73,22 @@ export default class Utils {
    * Write shareable state to URL (replaceState — no navigation, no history entry).
    * Only non-default values are written.
    */
-  static syncUrlParams({ url, columns, pageSize, center, zoom, viewportFilter }) {
+  static syncUrlParams({ url, columns, pageSize, center, zoom, bbox }) {
+    if (!url) {
+      history.replaceState({}, '', window.location.pathname);
+      return;
+    }
     const p = new URLSearchParams();
-    if (url) p.set('url', url);
+    p.set('url', url);
     if (columns && columns.length > 0) p.set('columns', columns.join(','));
     if (pageSize && pageSize !== DEFAULT_PAGE_SIZE) p.set('pageSize', String(pageSize));
     if (center && zoom != null) {
       p.set('map', `${zoom.toFixed(2)}/${center[0].toFixed(5)}/${center[1].toFixed(5)}`);
     }
-    if (viewportFilter) p.set('viewport', '1');
-    const qs = p.toString();
-    history.replaceState({}, '', qs ? `?${qs}` : window.location.pathname);
+    if (bbox && bbox.length === 4) {
+      p.set('bbox', bbox.map((v) => v.toFixed(6)).join(','));
+    }
+    history.replaceState({}, '', `?${p.toString()}`);
   }
 
   static friendlyError(err) {

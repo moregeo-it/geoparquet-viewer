@@ -69,7 +69,6 @@
               :bbox="reprojectedBbox"
               :initial-center="urlInit?.center"
               :initial-zoom="urlInit?.zoom"
-              :skip-initial-fit="skipInitialFit"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -405,10 +404,6 @@ export default {
       return this.$vuetify.display.smAndDown;
     },
 
-    skipInitialFit() {
-      return !!this.urlInit?.viewportFilter && !!this.urlInit?.center && !!this.urlInit?.zoom;
-    },
-
     /** True only during the very first load (no schema yet) */
 
     initialLoading() {
@@ -596,7 +591,7 @@ export default {
       this.reset();
       this.source = url;
       this.displaySource = url;
-      this.syncUrl();
+
       await this.loadData();
     },
 
@@ -606,7 +601,7 @@ export default {
       this.source = name;
       this.localFileName = name;
       this.displaySource = file.name;
-      this.syncUrl();
+      history.replaceState({}, '', window.location.pathname);
       this.loading = true;
       this.setStatus(`Reading file ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...`);
       try {
@@ -676,15 +671,28 @@ export default {
         this.rowGroupSize = meta.rowGroupSize;
 
         // Pause: let the user choose columns, page size, etc.
-        // If URL already had settings, auto-apply them (skip modal).
+        // If URL already had full settings (columns + pageSize + optionally bbox),
+        // auto-apply them and skip the modal for seamless shared-link experience.
         this.statusMessage = '';
         this.loading = false;
         const init = this.urlInit;
-        if (init?.columns || init?.pageSize) {
-          this.applyQuerySettings({
-            selectedColumns: init.columns,
-            pageSize: init.pageSize || DEFAULT_PAGE_SIZE
-          });
+        if (init?.columns) {
+          // Full URL state — skip modal (pageSize defaults to DEFAULT_PAGE_SIZE when absent)
+          const pageSize = init.pageSize || DEFAULT_PAGE_SIZE;
+          if (init.bbox && this.hasBboxCovering) {
+            // Shared viewport link: load exact bbox the sharer was seeing
+            this.selectedColumns = init.columns;
+            this.pageSize = pageSize;
+            this.viewportBounds = init.bbox;
+            this.viewportActive = true;
+            this.urlInit = null;
+            this.reloadForViewport();
+          } else {
+            this.applyQuerySettings({
+              selectedColumns: init.columns,
+              pageSize
+            });
+          }
         } else {
           this.querySettingsOpen = true;
         }
@@ -711,17 +719,11 @@ export default {
       this.filters = [];
 
       // If URL says viewport filtering was active, skip the full query —
-      // load only viewport data. If bounds are already available (map loaded
-      // before metadata finished), trigger immediately. Otherwise wait for
-      // the map's first viewportChange event.
-      if (this.urlInit?.viewportFilter && this.hasBboxCovering) {
-        if (this.viewportBounds) {
-          this.urlInit = null;
-          this.reloadForViewport();
-        } else {
-          this.loading = true;
-          this.setStatus('Waiting for map viewport...');
-        }
+      // load only viewport data using the saved bbox.
+      if (this.urlInit?.bbox && this.hasBboxCovering) {
+        this.viewportBounds = this.urlInit.bbox;
+        this.urlInit = null;
+        this.reloadForViewport();
         return;
       }
       // URL init consumed — clear so subsequent applyQuerySettings calls are normal
@@ -741,13 +743,14 @@ export default {
      * Sync current state to URL query params (replaceState — no navigation).
      */
     syncUrl() {
+      if (this.localFileName) return;
       Utils.syncUrlParams({
-        url: this.localFileName ? null : this.source,
+        url: this.source,
         columns: this.selectedColumns,
         pageSize: this.pageSize,
         center: this.mapCenter,
         zoom: this.mapZoom,
-        viewportFilter: this.viewportActive || this.viewportStale
+        bbox: (this.viewportActive || this.viewportStale) ? this.viewportBounds : null
       });
     },
 
@@ -926,19 +929,14 @@ export default {
 
     // ── Viewport-driven spatial filtering ──────────────────
     onViewportChange({ bbox, center, zoom }) {
-      this.viewportBounds = bbox;
       this.mapCenter = center;
       this.mapZoom = zoom;
+      // Sync URL on viewport changes, but debounced to avoid flooding when user is actively panning/zooming.
       this.debouncedSyncUrl();
 
-      // Auto-reload viewport on initial load when URL had viewport=1
-      if (this.urlInit?.viewportFilter && this.hasBboxCovering) {
-        this.urlInit = null;
-        this.loading = false;
-        this.statusMessage = '';
-        this.reloadForViewport();
-        return;
-      }
+      if (this.viewportActive) return;
+
+      this.viewportBounds = bbox;
 
       if (!this.source || !this.hasBboxCovering) return;
       // Mark viewport as stale — user decides when to reload.

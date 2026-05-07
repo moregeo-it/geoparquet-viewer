@@ -42,8 +42,7 @@ export default {
     isDark: { type: Boolean, default: false },
     bbox: { type: Array, default: null },
     initialCenter: { type: Array, default: null },
-    initialZoom: { type: Number, default: null },
-    skipInitialFit: { type: Boolean, default: false }
+    initialZoom: { type: Number, default: null }
   },
   emits: ['select', 'viewportChange', 'reloadViewport'],
   data() {
@@ -51,8 +50,7 @@ export default {
       map: null,
       overlay: null,
       ready: false,
-      moveEndTimer: null,
-      hasFittedOnce: false
+      moveEndTimer: null
     };
   },
   created() {
@@ -280,13 +278,6 @@ export default {
 
     fitBounds() {
       if (!this.bounds || !this.map) return;
-      // Skip fitBounds only when viewport-filtered mode was active (viewport=1 in URL).
-      // For regular shared URLs, always fit to data extent.
-      if (this.skipInitialFit && !this.hasFittedOnce) {
-        this.hasFittedOnce = true;
-        return;
-      }
-      this.hasFittedOnce = true;
       // Validate bounds are finite numbers before calling fitBounds.
       const [[w, s], [e, n]] = this.bounds;
       if (!isFinite(w) || !isFinite(s) || !isFinite(e) || !isFinite(n)) return;
