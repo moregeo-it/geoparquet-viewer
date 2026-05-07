@@ -32,8 +32,8 @@
             <div class="font-weight-bold">{{ col.title }}</div>
             <div
               v-if="col.subtitle"
-              class="text-grey font-weight-regular"
-              style="font-size: 0.65rem"
+              class="text-grey font-weight-regular subtype"
+              :title="col.subtitle"
             >
               {{ col.subtitle }}
             </div>
@@ -154,6 +154,14 @@ export default {
 .table-header {
   background: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+.subtype {
+  font-size: 0.65rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 75px;
+  min-width: 100%;
 }
 </style>
 

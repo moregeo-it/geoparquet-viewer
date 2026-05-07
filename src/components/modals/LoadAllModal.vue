@@ -3,6 +3,7 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     width="auto"
+    scrollable
   >
     <v-card>
       <v-card-title class="text-h6">Loading all remaining data?</v-card-title>

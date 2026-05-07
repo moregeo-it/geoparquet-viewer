@@ -500,7 +500,7 @@ export default {
         (this.fileInfo || this.schema || this.kvMetadata || this.geoMetadata) && {
           items: [
             this.fileInfo && {
-              title: 'File',
+              title: 'File Info',
               action: () => {
                 this.fileInfoDialogOpen = true;
               }
