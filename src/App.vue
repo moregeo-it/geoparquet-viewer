@@ -185,7 +185,7 @@ import {
   toBinary,
   findGeoColumn
 } from '@walkthru-earth/objex-utils';
-import { friendlyError, checkFileHealth } from './utils.js';
+import Utils, { friendlyError, checkFileHealth } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -646,7 +646,7 @@ export default {
       this.source = name;
       this.displaySource = file.name;
       this.loading = true;
-      this.setStatus(`Reading file ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...`);
+      this.setStatus(`Reading file ${file.name} (${Utils.formatBytes(file.size)})...`);
       try {
         const buffer = await file.arrayBuffer();
         await registerLocalFile(name, buffer);

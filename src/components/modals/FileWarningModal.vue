@@ -2,19 +2,19 @@
   <v-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    width="auto"
+    max-width="1000px"
     persistent
   >
     <v-card>
       <v-card-title class="d-flex align-center ga-2">
         <v-icon color="warning" icon="mdi-alert-outline" />
-        Large File Warning
+        File Warnings
       </v-card-title>
       <v-divider />
       <v-card-text>
         <p class="text-body-2 mb-3">
-          This file has characteristics that may cause slow loading or high memory usage in the
-          browser:
+          This file has characteristics that are not optimized for web viewing and may load slowly
+          or not at all. The following warnings were detected:
         </p>
         <v-list density="compact" class="pa-0">
           <v-list-item
@@ -32,7 +32,8 @@
           </v-list-item>
         </v-list>
         <p class="text-body-2 mt-4 text-grey-darken-1">
-          You can still proceed — metadata loading may take a while.
+          You can still proceed — loading may take significant time depending on your connection
+          speed.
         </p>
       </v-card-text>
       <v-card-actions>
@@ -64,3 +65,13 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+:deep(.v-list-item-subtitle) {
+  -webkit-line-clamp: none;
+  overflow: visible;
+  text-overflow: initial;
+  white-space: pre-wrap;
+  line-height: 1.33em;
+}
+</style>

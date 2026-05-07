@@ -16,7 +16,24 @@ export default class Utils {
   static isObject(obj) {
     return typeof obj === 'object' && obj === Object(obj) && !Array.isArray(obj);
   }
+
+  static formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
 }
+
+// Files should be partitioned when larger than 2 GB according to
+// https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md
+// Give some additional leeway and use 5 GB, which would be 3 files and where it makes sense to actually split files.
+// Partionioning inconvenience into just two files seems not always worth.
+const MAX_REC_FILE_SIZE = 5 * 1024 * 1024 * 1024;
+
+// There's no specific best practice, but performnce degrades when the footer is too small.
+// It's an indication for too small row groups when the data is pretty large.
+const MAX_REC_FOOTER_SIZE = 10 * 1024 * 1024; // 10 MB
 
 /**
  * Pre-DuckDB health check for remote Parquet files.
@@ -62,21 +79,21 @@ export async function checkFileHealth(url, { timeout = 5000 } = {}) {
 
     const footerSize = new DataView(buf).getUint32(0, true);
 
-    if (footerSize > 1 * 1024 * 1024) {
+    if (footerSize > MAX_REC_FOOTER_SIZE) {
       warnings.push({
         icon: 'mdi-file-outline',
-        title: `Large Parquet footer (${(footerSize / 1024 / 1024).toFixed(1)} MB)`,
+        title: `Large Parquet footer (${Utils.formatBytes(footerSize)})`,
         detail:
-          'Reading the schema and metadata will require downloading the entire footer — this may take a while.'
+          'The footer size is large. The initial loading may be slow while reading the schema and metadata.\nA large footer may result from a large number of columns or that the row groups in comparison to the overall files size are too small.'
       });
     }
 
-    if (fileSize && fileSize > 5 * 1024 * 1024 * 1024) {
+    if (fileSize && fileSize > MAX_REC_FILE_SIZE) {
       warnings.push({
         icon: 'mdi-harddisk',
-        title: `Very large file (${(fileSize / 1024 / 1024 / 1024).toFixed(1)} GB)`,
+        title: `Very large file (${Utils.formatBytes(fileSize)})`,
         detail:
-          'Queries may require significant downloads. Consider using viewport filtering to load only visible data.'
+          'The file size exceeds the recommended maximum by far. Data may load fine, but you likely can not load the entire file.\nTry selecting fewer columns or filter by map viewport.\nThe Parquet file should ideally be partitioned into multiple files.'
       });
     }
   } catch {
