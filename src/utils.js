@@ -81,7 +81,7 @@ export default class Utils {
     const p = new URLSearchParams();
     p.set('url', url);
     if (columns && columns.length > 0) p.set('columns', columns.join(','));
-    if (pageSize && pageSize !== DEFAULT_PAGE_SIZE) p.set('pageSize', String(pageSize));
+    if (pageSize && pageSize !== null) p.set('pageSize', String(pageSize));
     if (center && zoom != null) {
       p.set('map', `${zoom.toFixed(2)}/${center[0].toFixed(5)}/${center[1].toFixed(5)}`);
     }

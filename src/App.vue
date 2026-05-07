@@ -592,6 +592,8 @@ export default {
       this.source = url;
       this.displaySource = url;
 
+      this._skipInitialFit = !!this.urlInit?.center;
+
       await this.loadData();
     },
 
@@ -652,6 +654,7 @@ export default {
       this.viewportActive = false;
       this.viewportGeneration = 0;
       this.selectedColumns = null;
+      this._skipInitialFit = false;
     },
 
     async loadData() {
@@ -677,10 +680,8 @@ export default {
         this.loading = false;
         const init = this.urlInit;
         if (init?.columns) {
-          // Full URL state — skip modal (pageSize defaults to DEFAULT_PAGE_SIZE when absent)
-          const pageSize = init.pageSize || DEFAULT_PAGE_SIZE;
+          const pageSize = init.pageSize;
           if (init.bbox && this.hasBboxCovering) {
-            // Shared viewport link: load exact bbox the sharer was seeing
             this.selectedColumns = init.columns;
             this.pageSize = pageSize;
             this.viewportBounds = init.bbox;
@@ -894,7 +895,7 @@ export default {
       this.lastPageFull = limit ? numRows >= limit : false;
 
       // Set map bounds on first load (skip if already set, e.g. viewport reload)
-      if (offset === 0 && !this.mapBounds && this.geoArrowResults.length > 0) {
+      if (offset === 0 && !this.mapBounds && !this._skipInitialFit && this.geoArrowResults.length > 0) {
         const geoColMeta = this.geoMetadata?.columns?.[geoCol];
         if (!this.needsReprojection && geoColMeta?.bbox && geoColMeta.bbox.length >= 4) {
           const [minx, miny, maxx, maxy] = geoColMeta.bbox;
@@ -929,14 +930,11 @@ export default {
 
     // ── Viewport-driven spatial filtering ──────────────────
     onViewportChange({ bbox, center, zoom }) {
+      this.viewportBounds = bbox;
       this.mapCenter = center;
       this.mapZoom = zoom;
       // Sync URL on viewport changes, but debounced to avoid flooding when user is actively panning/zooming.
       this.debouncedSyncUrl();
-
-      if (this.viewportActive) return;
-
-      this.viewportBounds = bbox;
 
       if (!this.source || !this.hasBboxCovering) return;
       // Mark viewport as stale — user decides when to reload.
