@@ -6,6 +6,7 @@ A simple GeoParquet Viewer for the Web.
 
 ```sh
 npm install
+npm run load-extensions
 ```
 
 ### Compile and Hot-Reload for Development

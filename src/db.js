@@ -11,6 +11,12 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 // Import WASM + worker assets as URLs so Vite copies them into the build output.
 import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import duckdb_worker_eh from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
+import httpfsExtUrl from '../extensions/httpfs.duckdb_extension.wasm?url';
+import spatialExtUrl from '../extensions/spatial.duckdb_extension.wasm?url';
+import parquetExtUrl from '../extensions/parquet.duckdb_extension.wasm?url';
+
+/** Resolve a Vite asset URL to an absolute HTTP URL for DuckDB's LOAD command. */
+const absExtUrl = (url) => new URL(url, location.href).href;
 
 let _db = null;
 let _conn = null;
@@ -79,36 +85,26 @@ export async function initDB(onProgress) {
       console.warn('Could not preload coordinate systems:', e.message);
     }
 
-    _emitProgress('Loading httpfs extension...');
-    try {
-      await _conn.query(`INSTALL httpfs`);
-      await _conn.query(`LOAD httpfs`);
-      _emitProgress('httpfs extension loaded.');
-    } catch (e) {
-      console.warn('httpfs extension not available:', e.message);
-      _emitProgress('httpfs extension unavailable — HTTP sources will not work.');
-    }
+    const loadExtension = async (name, url, unavailableMsg) => {
+      _emitProgress(`Loading ${name} extension...`);
+      try {
+        await _conn.query(`LOAD '${absExtUrl(url)}'`);
+        _emitProgress(`${name} extension loaded.`);
+        return true;
+      } catch (e) {
+        console.warn(`${name} extension not available:`, e.message);
+        _emitProgress(`${name} extension unavailable — ${unavailableMsg}`);
+        return false;
+      }
+    };
 
-    _emitProgress('Loading spatial extension...');
-    try {
-      await _conn.query(`INSTALL spatial`);
-      await _conn.query(`LOAD spatial`);
-      _spatialLoaded = true;
-      _emitProgress('Spatial extension loaded.');
-    } catch (e) {
-      console.warn('Spatial extension not available:', e.message);
-      _emitProgress('Spatial extension unavailable — using client-side WKB parsing.');
-    }
-
-    _emitProgress('Loading parquet extension...');
-    try {
-      await _conn.query(`INSTALL parquet`);
-      await _conn.query(`LOAD parquet`);
-      _emitProgress('Parquet extension loaded.');
-    } catch (e) {
-      console.warn('Parquet extension not available:', e.message);
-      _emitProgress('Parquet extension unavailable — using client-side Parquet parsing.');
-    }
+    await loadExtension('parquet', parquetExtUrl, 'No data can be loaded.');
+    await loadExtension('httpfs', httpfsExtUrl, 'All files will be fully loaded into memory.');
+    _spatialLoaded = await loadExtension(
+      'spatial',
+      spatialExtUrl,
+      'Only WGS84-based datasets will show on the map.'
+    );
 
     _progressListeners.clear();
     return { db: _db, conn: _conn };

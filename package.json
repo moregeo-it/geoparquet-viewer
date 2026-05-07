@@ -4,11 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run load-extensions && vite build",
     "preview": "vite preview",
     "lint": "eslint . --fix",
     "format": "prettier --write src/",
-    "format:check": "prettier --check src/"
+    "format:check": "prettier --check src/",
+    "load-extensions": "node load-extensions.js"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.0",
