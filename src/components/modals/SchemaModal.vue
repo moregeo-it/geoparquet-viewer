@@ -19,14 +19,20 @@
         <v-table density="compact">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Column Name</th>
-              <th>Type</th>
-              <th>DuckDB Type</th>
+              <th rowspan="2">ID</th>
+              <th rowspan="2">
+                <span style="width: 20px; display: inline-block" />
+                Column Name
+              </th>
+              <th rowspan="2">DuckDB Type</th>
+              <th colspan="4" class="text-center">Parquet</th>
+              <th rowspan="2">Info</th>
+            </tr>
+            <tr>
+              <th>Primitive Type</th>
               <th>Converted Type</th>
               <th>Logical Type</th>
               <th>Repetition</th>
-              <th>Info</th>
             </tr>
           </thead>
           <tbody>
@@ -72,24 +78,19 @@
                   </span>
                 </td>
                 <td>
-                  <code v-if="node.logical_type">{{ node.logical_type }}</code>
-                  <code v-else-if="node.converted_type && node.converted_type !== 'NONE'">{{
-                    node.converted_type
-                  }}</code>
-                  <code v-else-if="node.type">{{ node.type }}</code>
-                  <span v-else class="text-grey">—</span>
+                  <code>{{ node.duckdb_type }}</code>
                 </td>
                 <td>
-                  <span class="text-caption">{{ node.duckdb_type }}</span>
+                  <code>{{ node.type || '—' }}</code>
                 </td>
                 <td>
-                  <span class="text-caption">{{ node.converted_type || '—' }}</span>
+                  <code>{{ node.converted_type || '—' }}</code>
                 </td>
                 <td>
-                  <span class="text-caption">{{ node.logical_type || '—' }}</span>
+                  <code>{{ node.logical_type || '—' }}</code>
                 </td>
                 <td>
-                  <span class="text-caption">{{ formatRepetition(node.repetition_type) }}</span>
+                  <code>{{ formatRepetition(node.repetition_type) }}</code>
                 </td>
                 <td>
                   <template v-if="isGeoColumn(node.name)">
@@ -206,18 +207,18 @@ export default {
       return 'Custom CRS';
     },
     formatRepetition(rep) {
-      if (!rep) return '';
-      switch (rep) {
-        case 'REQUIRED':
-          return 'required';
-        case 'OPTIONAL':
-          return 'optional';
-        case 'REPEATED':
-          return 'repeated';
-        default:
-          return rep.toLowerCase();
-      }
+      if (typeof rep !== 'string') return '';
+      return rep.toLowerCase();
     }
   }
 };
 </script>
+
+<style scoped>
+th {
+  vertical-align: bottom;
+}
+.border-right {
+  border-right: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+</style>

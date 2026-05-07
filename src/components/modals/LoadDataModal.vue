@@ -3,6 +3,7 @@
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
     width="auto"
+    scrollable
   >
     <v-card>
       <v-card-title>Load Data</v-card-title>
@@ -106,6 +107,7 @@ export default {
     selectExample(url) {
       this.newUrl = url;
       this.selectedFile = null;
+      this.submit();
     },
     onFileSelect(files) {
       const file = Array.isArray(files) ? files[0] : files;

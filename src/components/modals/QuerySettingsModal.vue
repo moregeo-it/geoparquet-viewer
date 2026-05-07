@@ -5,6 +5,7 @@
     min-width="480"
     width="50%"
     max-width="90%"
+    scrollable
   >
     <v-card class="query-settings">
       <v-card-title>Data Loading Preferences</v-card-title>
