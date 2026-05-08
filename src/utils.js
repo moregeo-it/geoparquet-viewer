@@ -60,7 +60,7 @@ export default class Utils {
     let center = null;
     let zoom = null;
     if (mapParam) {
-      const parts = mapParam.split('/').map(Number);
+      const parts = mapParam.split('~').map(Number);
       if (parts.length === 3 && parts.every(Number.isFinite)) {
         zoom = parts[0];
         center = [parts[1], parts[2]];
@@ -70,7 +70,7 @@ export default class Utils {
     let bbox = null;
     const bboxParam = p.get('bbox');
     if (bboxParam) {
-      const parts = bboxParam.split(',').map(Number);
+      const parts = bboxParam.split('~').map(Number);
       if (parts.length === 4 && parts.every(Number.isFinite)) {
         bbox = parts;
       }
@@ -100,10 +100,10 @@ export default class Utils {
     if (columns && columns.length > 0) columns.forEach((col) => p.append('c', col));
     if (pageSize && pageSize !== null) p.set('pageSize', String(pageSize));
     if (center && zoom != null) {
-      p.set('map', `${zoom.toFixed(2)}/${center[0].toFixed(5)}/${center[1].toFixed(5)}`);
+      p.set('map', `${zoom.toFixed(2)}~${center[0].toFixed(5)}~${center[1].toFixed(5)}`);
     }
     if (bbox && bbox.length === 4) {
-      p.set('bbox', bbox.map((v) => v.toFixed(6)).join(','));
+      p.set('bbox', bbox.map((v) => v.toFixed(6)).join('~'));
     }
     history.replaceState({}, '', `?${p.toString()}`);
   }
