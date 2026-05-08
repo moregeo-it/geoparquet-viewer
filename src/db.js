@@ -6,21 +6,12 @@
  *
  * All WASM/worker assets are bundled locally — no external CDN dependency at runtime.
  */
-import * as duckdb from '@duckdb/duckdb-wasm';
-
-// Import WASM + worker assets as URLs so Vite copies them into the build output.
-import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
-import duckdb_worker_eh from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
-import httpfsExtUrl from '../extensions/httpfs.duckdb_extension.wasm?url';
-import spatialExtUrl from '../extensions/spatial.duckdb_extension.wasm?url';
-import parquetExtUrl from '../extensions/parquet.duckdb_extension.wasm?url';
 
 /** Resolve a Vite asset URL to an absolute HTTP URL for DuckDB's LOAD command. */
 const absExtUrl = (url) => new URL(url, location.href).href;
 
 let _db = null;
 let _conn = null;
-let _spatialLoaded = false;
 let _initPromise = null;
 let _lastProgressMsg = null;
 
@@ -38,9 +29,14 @@ function _emitProgress(msg) {
 /**
  * Initialize DuckDB-WASM with required extensions.
  * WASM bundles are self-hosted (no external CDN dependency).
+ *
+ * @param {Function} onProgress - Optional callback to receive progress messages during initialization.
+ * @returns {Promise} Resolves when initialization is complete.
  */
 export async function initDB(onProgress) {
-  if (_db && _conn) return { db: _db, conn: _conn };
+  if (_db && _conn) {
+    return Promise.resolve();
+  }
 
   // Register late-joining progress listener so callers see remaining init steps.
   if (onProgress) {
@@ -48,32 +44,45 @@ export async function initDB(onProgress) {
     if (_lastProgressMsg) onProgress(_lastProgressMsg);
   }
 
-  if (_initPromise) return _initPromise;
+  if (_initPromise) {
+    return _initPromise;
+  }
 
   _initPromise = (async () => {
+    _emitProgress('Loading DuckDB...');
+
+    const promises = [
+      import('@duckdb/duckdb-wasm'),
+      import('@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url'),
+      import('@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'),
+      import('../extensions/httpfs.duckdb_extension.wasm?url'),
+      import('../extensions/spatial.duckdb_extension.wasm?url'),
+      import('../extensions/parquet.duckdb_extension.wasm?url')
+    ];
+
+    const modules = await Promise.all(promises);
+    const [duckdb, duckdb_wasm_eh, duckdb_worker_eh, httpfsExtUrl, spatialExtUrl, parquetExtUrl] =
+      modules;
+
+    const mainModule = duckdb_wasm_eh.default;
+    const mainWorker = duckdb_worker_eh.default;
+    const httpfsExt = httpfsExtUrl.default;
+    const spatialExt = spatialExtUrl.default;
+    const parquetExt = parquetExtUrl.default;
+
     _emitProgress('Starting DuckDB...');
 
-    // Always use EH (exception handling) bundle — required for spatial/PROJ operations.
-    const mainModule = duckdb_wasm_eh;
-    const mainWorker = duckdb_worker_eh;
+    let worker = new Worker(mainWorker);
 
-    const worker = new Worker(mainWorker);
     const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
     _db = new duckdb.AsyncDuckDB(logger, worker);
+
     await _db.instantiate(mainModule);
 
     _emitProgress('Opening database...');
-    try {
-      await _db.open({
-        query: {
-          castBigIntToDouble: true
-        }
-      });
-    } catch {
-      // Fallback: open without config if config format isn't supported
-      await _db.open({});
-    }
+    await _db.open({});
 
+    _emitProgress('Connection to database...');
     _conn = await _db.connect();
 
     // Workaround for DuckDB-WASM PROJ initialization timing issue (#2199):
@@ -82,49 +91,35 @@ export async function initDB(onProgress) {
     try {
       await _conn.query(`SELECT * FROM duckdb_coordinate_systems()`);
     } catch (e) {
-      console.warn('Could not preload coordinate systems:', e.message);
+      throw new Error('Failed to load coordinate reference systems', { cause: e });
     }
 
     const loadExtension = async (name, url, unavailableMsg) => {
       _emitProgress(`Loading ${name} extension...`);
       try {
         await _conn.query(`LOAD '${absExtUrl(url)}'`);
-        _emitProgress(`${name} extension loaded.`);
-        return true;
       } catch (e) {
-        console.warn(`${name} extension not available:`, e.message);
-        _emitProgress(`${name} extension unavailable — ${unavailableMsg}`);
-        return false;
+        throw new Error(`Failed to load ${name} extension: ${e.message}. ${unavailableMsg}`, {
+          cause: e
+        });
       }
     };
 
-    await loadExtension('parquet', parquetExtUrl, 'No data can be loaded.');
-    await loadExtension('httpfs', httpfsExtUrl, 'All files will be fully loaded into memory.');
-    _spatialLoaded = await loadExtension(
-      'spatial',
-      spatialExtUrl,
-      'Only WGS84-based datasets will show on the map.'
-    );
+    await loadExtension('parquet', parquetExt, 'No data can be loaded.');
+    await loadExtension('httpfs', httpfsExt, 'All files will be fully loaded into memory.');
+    await loadExtension('spatial', spatialExt, 'Only WGS84-based datasets will show on the map.');
 
     _progressListeners.clear();
-    return { db: _db, conn: _conn };
   })();
 
   return _initPromise;
 }
 
-/** Whether the DuckDB spatial extension is loaded */
-export function isSpatialLoaded() {
-  return _spatialLoaded;
-}
-
 export async function getDB() {
-  if (!_db) await initDB();
   return _db;
 }
 
 export async function getConnection() {
-  if (!_conn) await initDB();
   return _conn;
 }
 
@@ -445,7 +440,7 @@ export async function queryCount(
   const escaped = escapeSource(source);
   // Pre-transform viewport bbox to source CRS when using covering columns.
   let effectiveBbox = bbox;
-  if (bbox && bboxCovering && sourceCrs && _spatialLoaded) {
+  if (bbox && bboxCovering && sourceCrs) {
     try {
       effectiveBbox = await transformBbox(bbox, 'EPSG:4326', sourceCrs);
     } catch (e) {
@@ -486,13 +481,13 @@ export async function queryData(
   // detect it now. This matters because DuckDB spatial auto-decodes GeoParquet
   // geometry columns to GEOMETRY, making ST_GeomFromWKB() fail with a type error.
   let isAlreadyGeom = alreadyGeometry;
-  if (isAlreadyGeom === null && geoColumn && _spatialLoaded) {
+  if (isAlreadyGeom === null && geoColumn) {
     isAlreadyGeom = await isGeometryType(source, geoColumn);
   }
 
   // Pre-transform viewport bbox to source CRS when using covering columns.
   let effectiveBbox = bbox;
-  if (bbox && bboxCovering && sourceCrs && _spatialLoaded) {
+  if (bbox && bboxCovering && sourceCrs) {
     try {
       effectiveBbox = await transformBbox(bbox, 'EPSG:4326', sourceCrs);
     } catch (e) {
@@ -504,7 +499,7 @@ export async function queryData(
   const where = buildWhereClause(filters, effectiveBbox, geoColumn, bboxCovering);
 
   let geoSelect = '';
-  if (geoColumn && _spatialLoaded) {
+  if (geoColumn) {
     const baseExpr = geomExpr(geoColumn, isAlreadyGeom);
     if (sourceCrs) {
       // Reproject to WGS84 when source CRS is known.
