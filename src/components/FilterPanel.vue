@@ -76,7 +76,9 @@
               </v-btn>
             </div>
           </template>
-          <div v-else class="text-body-2 text-center text-grey-darken-1 mt-1">No filters applied.</div>
+          <div v-else class="text-body-2 text-center text-grey-darken-1 mt-1">
+            No filters applied.
+          </div>
         </div>
       </v-expansion-panel-text>
     </v-expansion-panel>
@@ -92,16 +94,23 @@ const ALL_OPERATORS = [
   { value: '<', label: '<' },
   { value: '<=', label: '≤' },
   { value: 'LIKE', label: 'contains' },
-  {value: 'IS TRUE', label: 'is true'},
-  {value: 'IS NOT TRUE', label: 'is not true'},
-  {value: 'IS FALSE', label: 'is false'},
-  {value: 'IS NOT FALSE', label: 'is not false'},
+  { value: 'IS TRUE', label: 'is true' },
+  { value: 'IS NOT TRUE', label: 'is not true' },
+  { value: 'IS FALSE', label: 'is false' },
+  { value: 'IS NOT FALSE', label: 'is not false' },
   { value: 'IS NULL', label: 'is null' },
   { value: 'IS NOT NULL', label: 'is not null' }
 ];
 
 const NUMERIC_OPERATORS = ['=', '!=', '>', '>=', '<', '<=', 'IS NULL', 'IS NOT NULL'];
-const BOOLEAN_OPERATORS = ['IS FALSE', 'IS TRUE', 'IS NOT TRUE', 'IS NOT FALSE', 'IS NULL', 'IS NOT NULL'];
+const BOOLEAN_OPERATORS = [
+  'IS FALSE',
+  'IS TRUE',
+  'IS NOT TRUE',
+  'IS NOT FALSE',
+  'IS NULL',
+  'IS NOT NULL'
+];
 
 const NO_VALUE_OPS = ['IS NULL', 'IS NOT NULL'];
 
