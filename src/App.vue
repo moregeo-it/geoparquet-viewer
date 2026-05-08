@@ -269,6 +269,11 @@ export default {
       // BBOX metadata for the primary geometry column (if available)
       reprojectedBbox: null,
 
+      // Map viewport state (updated by MapView, used for spatial filtering and URL sync)
+      queryBbox: null,
+      mapZoom: null,
+      mapCenter: null,
+
       // Viewport
       viewportBounds: null,
       viewportGeneration: 0,
@@ -702,6 +707,7 @@ export default {
       this.selectedColumns = null;
       this._skipInitialFit = false;
       this.columnSizes = null;
+      this.queryBbox = null;
     },
 
     async loadData() {
@@ -798,7 +804,7 @@ export default {
         pageSize: this.pageSize,
         center: this.mapCenter,
         zoom: this.mapZoom,
-        bbox: this.viewportActive || this.viewportStale ? this.viewportBounds : null
+        bbox: this.queryBbox
       });
     },
 
@@ -998,6 +1004,7 @@ export default {
     reloadForViewport() {
       this.viewportStale = false;
       this.viewportActive = true;
+      this.queryBbox = this.viewportBounds;
       this.syncUrl();
       const gen = ++this.viewportGeneration;
       this.rows = [];
