@@ -55,7 +55,9 @@
         </v-btn>
       </div>
       <div class="mt-2">
-        <v-btn size="small" color="primary" variant="flat" :disabled="!canApply" @click="apply"> Apply Filters </v-btn>
+        <v-btn size="small" color="primary" variant="flat" :disabled="!canApply" @click="apply">
+          Apply Filters
+        </v-btn>
       </div>
     </template>
   </div>
@@ -79,7 +81,8 @@ const BOOLEAN_OPERATORS = ['=', '!=', 'IS NULL', 'IS NOT NULL'];
 
 const NO_VALUE_OPS = ['IS NULL', 'IS NOT NULL'];
 
-const NUMERIC_TYPES = /^(TINYINT|SMALLINT|INTEGER|INT|BIGINT|HUGEINT|FLOAT|REAL|DOUBLE|DECIMAL|NUMERIC|UTINYINT|USMALLINT|UINTEGER|UBIGINT)/i;
+const NUMERIC_TYPES =
+  /^(TINYINT|SMALLINT|INTEGER|INT|BIGINT|HUGEINT|FLOAT|REAL|DOUBLE|DECIMAL|NUMERIC|UTINYINT|USMALLINT|UINTEGER|UBIGINT)/i;
 const BOOLEAN_TYPES = /^BOOLEAN/i;
 
 function isNumericType(type) {
