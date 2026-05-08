@@ -65,7 +65,7 @@
                 hide-details
                 clearable
                 placeholder="Value..."
-                @keydown.enter="apply"
+                @keydown.enter="canApply && apply()"
               />
               <v-btn icon size="x-small" variant="text" @click="removeFilter(i)">
                 <v-icon>mdi-close</v-icon>
