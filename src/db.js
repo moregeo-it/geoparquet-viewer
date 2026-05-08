@@ -576,7 +576,14 @@ function buildWhereClause(filters, bbox = null, geoColumn = null, bboxCovering =
 }
 
 const ALLOWED_BINARY_OPS = new Set(['=', '!=', '>', '>=', '<', '<=']);
-const ALLOWED_UNARY_OPS = new Set(['IS NULL', 'IS NOT NULL', 'IS TRUE', 'IS NOT TRUE', 'IS FALSE', 'IS NOT FALSE']);
+const ALLOWED_UNARY_OPS = new Set([
+  'IS NULL',
+  'IS NOT NULL',
+  'IS TRUE',
+  'IS NOT TRUE',
+  'IS FALSE',
+  'IS NOT FALSE'
+]);
 
 function buildFilterCondition(filter) {
   const col = `"${filter.column}"`;
