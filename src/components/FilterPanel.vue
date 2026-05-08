@@ -12,9 +12,7 @@
       </v-expansion-panel-title>
       <v-expansion-panel-text class="filter-panel-body">
         <div class="filter-toolbar">
-          <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addFilter">
-            Add
-          </v-btn>
+          <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addFilter"> Add </v-btn>
           <v-spacer />
           <v-btn
             v-if="appliedFilters.length > 0"
