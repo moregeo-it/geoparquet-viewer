@@ -580,18 +580,6 @@ function buildFilterCondition(filter) {
   const val = escapeSource(String(filter.value));
 
   switch (filter.operator) {
-    case '=':
-      return `CAST(${col} AS VARCHAR) = '${val}'`;
-    case '!=':
-      return `CAST(${col} AS VARCHAR) != '${val}'`;
-    case '>':
-      return `${col} > ${val}`;
-    case '>=':
-      return `${col} >= ${val}`;
-    case '<':
-      return `${col} < ${val}`;
-    case '<=':
-      return `${col} <= ${val}`;
     case 'LIKE':
       return `CAST(${col} AS VARCHAR) ILIKE '%${val}%'`;
     case 'IS NULL':
@@ -599,6 +587,6 @@ function buildFilterCondition(filter) {
     case 'IS NOT NULL':
       return `${col} IS NOT NULL`;
     default:
-      return `CAST(${col} AS VARCHAR) = '${val}'`;
+      return `${col} ${filter.operator} '${val}'`;
   }
 }
