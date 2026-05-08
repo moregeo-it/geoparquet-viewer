@@ -1,24 +1,23 @@
 <template>
-  <v-expansion-panels>
+  <v-expansion-panels class="filter-panel">
     <v-expansion-panel>
-      <v-expansion-panel-title class="pa-2">
+      <v-expansion-panel-title>
         <div class="d-flex align-center ga-2">
           <v-icon size="medium">mdi-filter-outline</v-icon>
           <span class="text-body-2 font-weight-bold">Filters</span>
-          <v-chip v-if="localFilters.length > 0" size="small" color="primary">
-            {{ localFilters.length }}
+          <v-chip v-if="appliedFilters.length > 0" size="small" color="primary">
+            {{ appliedFilters.length }}
           </v-chip>
         </div>
       </v-expansion-panel-title>
       <v-expansion-panel-text>
         <div class="filter-toolbar">
-          <v-btn size="x-small" variant="tonal" prepend-icon="mdi-plus" @click="addFilter">
+          <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addFilter">
             Add
           </v-btn>
           <v-spacer />
           <v-btn
-            v-if="localFilters.length > 0"
-            size="x-small"
+            v-if="appliedFilters.length > 0"
             variant="tonal"
             color="error"
             @click="clearFilters"
@@ -27,7 +26,6 @@
           </v-btn>
           <v-btn
             v-if="localFilters.length > 0"
-            size="x-small"
             color="primary"
             variant="flat"
             :disabled="!canApply"
@@ -76,9 +74,6 @@
               </v-btn>
             </div>
           </template>
-          <div v-else class="text-body-2 text-center text-grey-darken-1 mt-1">
-            No filters applied.
-          </div>
         </div>
       </v-expansion-panel-text>
     </v-expansion-panel>
@@ -141,7 +136,8 @@ export default {
   emits: ['apply'],
   data() {
     return {
-      localFilters: this.filters.map((f) => ({ ...f })),
+      appliedFilters: [],
+      localFilters: [],
       noValueOperators: NO_VALUE_OPS
     };
   },
@@ -181,7 +177,8 @@ export default {
       handler(newFilters) {
         this.localFilters = newFilters.map((f) => ({ ...f }));
       },
-      deep: true
+      deep: true,
+      immediate: true
     }
   },
   methods: {
@@ -227,9 +224,11 @@ export default {
     },
     clearFilters() {
       this.localFilters = [];
+      this.appliedFilters = [];
       this.apply();
     },
     apply() {
+      this.appliedFilters = this.localFilters;
       this.$emit(
         'apply',
         this.localFilters.map((f) => ({ ...f }))
@@ -253,5 +252,9 @@ export default {
 .filter-panel-content {
   max-height: 140px;
   overflow-y: auto;
+}
+.filter-panel {
+  border-bottom: 1px solid rgb(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 0;
 }
 </style>
