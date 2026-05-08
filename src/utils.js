@@ -51,11 +51,10 @@ export default class Utils {
    */
   static parseUrlState() {
     const p = new URLSearchParams(window.location.search);
-    const colsParam = p.get('columns');
     const pageSizeParam = p.get('pageSize');
     const mapParam = p.get('map');
 
-    const columns = colsParam ? colsParam.split(',').filter(Boolean) : null;
+    const columns = p.getAll('c').filter(Boolean);
     const rawPageSize = pageSizeParam ? parseInt(pageSizeParam, 10) : null;
 
     let center = null;
@@ -79,7 +78,7 @@ export default class Utils {
 
     return Object.freeze({
       url: p.get('url') || null,
-      columns: columns && columns.length > 0 ? columns : null,
+      columns: columns.length > 0 ? columns : null,
       pageSize: Number.isFinite(rawPageSize) && rawPageSize > 0 ? rawPageSize : null,
       center,
       zoom,
@@ -98,7 +97,7 @@ export default class Utils {
     }
     const p = new URLSearchParams();
     p.set('url', url);
-    if (columns && columns.length > 0) p.set('columns', columns.join(','));
+    if (columns && columns.length > 0) columns.forEach((col) => p.append('c', col));
     if (pageSize && pageSize !== null) p.set('pageSize', String(pageSize));
     if (center && zoom != null) {
       p.set('map', `${zoom.toFixed(2)}/${center[0].toFixed(5)}/${center[1].toFixed(5)}`);

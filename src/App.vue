@@ -181,12 +181,8 @@ import {
   queryCount,
   transformBbox
 } from './db.js';
-import {
-  buildGeoArrowTables,
-  toBinary,
-  findGeoColumn
-} from '@walkthru-earth/objex-utils';
-import Utils, { checkFileHealth } from './utils.js';
+import { buildGeoArrowTables, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
+import Utils, { checkFileHealth, DEFAULT_PAGE_SIZE } from './utils.js';
 
 import MapView from './components/MapView.vue';
 import TableView from './components/TableView.vue';
@@ -265,7 +261,7 @@ export default {
       filteredCount: null,
 
       // Pagination
-      pageSize: Utils.DEFAULT_PAGE_SIZE,
+      pageSize: DEFAULT_PAGE_SIZE,
       rowGroupSize: null,
       currentOffset: 0,
       lastPageFull: false,
@@ -535,7 +531,7 @@ export default {
     }
   },
   mounted() {
-        // Eagerly start DuckDB init in the background so WASM download + extension
+    // Eagerly start DuckDB init in the background so WASM download + extension
     // loading is already in-flight before the user picks a file/URL.
     // No progress shown here — loadData() registers a listener if init is still running.
     initDB().catch((e) => {
