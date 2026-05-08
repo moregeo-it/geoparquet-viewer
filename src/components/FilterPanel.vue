@@ -10,7 +10,7 @@
           </v-chip>
         </div>
       </v-expansion-panel-title>
-      <v-expansion-panel-text>
+      <v-expansion-panel-text class="filter-panel-body">
         <div class="filter-toolbar">
           <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addFilter">
             Add
@@ -256,5 +256,8 @@ export default {
 .filter-panel {
   border-bottom: 1px solid rgb(var(--v-border-color), var(--v-border-opacity));
   border-radius: 0;
+}
+.filter-panel-body {
+  border-top: 1px solid rgb(var(--v-border-color), var(--v-border-opacity));
 }
 </style>
