@@ -25,6 +25,7 @@
         <v-btn
           v-else
           size="small"
+          :disabled="item.disabled"
           :href="item.href"
           :target="item.href ? '_blank' : undefined"
           @click="item.action?.()"
@@ -64,6 +65,7 @@
           <v-list-item
             v-else
             :title="item.title"
+            :disabled="item.disabled"
             :href="item.href"
             :target="item.href ? '_blank' : undefined"
             @click="item.action && (item.action(), (open = false))"

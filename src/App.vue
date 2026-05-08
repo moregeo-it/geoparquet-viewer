@@ -88,7 +88,13 @@
           <p class="text-body-2 text-grey-darken-1" style="max-width: 500px">
             Supports local files and remote URLs with HTTP range requests.
           </p>
-          <v-btn color="primary" class="mt-4" size="large" @click="loadDialogOpen = true">
+          <v-btn
+            color="primary"
+            class="mt-4"
+            size="large"
+            :disabled="Boolean(dbError)"
+            @click="loadDialogOpen = true"
+          >
             Load Data
           </v-btn>
         </div>
@@ -168,6 +174,8 @@
       :remaining-rows="remainingRows"
       @load-all="loadAll"
     />
+
+    <DbInitErrorModal :model-value="Boolean(dbError)" :error="dbError" />
   </v-app>
 </template>
 
@@ -198,6 +206,7 @@ import LoadDataModal from './components/modals/LoadDataModal.vue';
 import ParquetStatsModal from './components/modals/ParquetStatsModal.vue';
 import SchemaModal from './components/modals/SchemaModal.vue';
 import FileWarningModal from './components/modals/FileWarningModal.vue';
+import DbInitErrorModal from './components/modals/DbInitErrorModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
 import KvMetadataModal, {
   FRIENDLY_NAMES as KV_FRIENDLY_NAMES
@@ -223,7 +232,8 @@ export default {
     FileWarningModal,
     SchemaModal,
     LoadAllModal,
-    AppBarMenu
+    AppBarMenu,
+    DbInitErrorModal
   },
   data() {
     return {
@@ -291,6 +301,9 @@ export default {
       // Query settings (user preferences applied before first query)
       selectedColumns: null,
       columnSizes: null,
+
+      // Database initialization errors
+      dbError: null,
 
       // Dialog visibility
       loadDialogOpen: false,
@@ -474,6 +487,7 @@ export default {
           items: [
             {
               title: 'Load Data',
+              disabled: Boolean(this.dbError),
               action: () => {
                 this.loadDialogOpen = true;
               }
@@ -535,13 +549,8 @@ export default {
       ].filter(Boolean);
     }
   },
-  mounted() {
-    // Eagerly start DuckDB init in the background so WASM download + extension
-    // loading is already in-flight before the user picks a file/URL.
-    // No progress shown here — loadData() registers a listener if init is still running.
-    initDB().catch((e) => {
-      console.error('DuckDB init failed:', e);
-    });
+  async mounted() {
+    initDB().catch(this.showDbError.bind(this));
 
     // Parse URL state once — frozen object, never mutated after this.
     const urlState = Utils.parseUrlState();
@@ -576,6 +585,10 @@ export default {
       const info = Utils.friendlyError(err);
       const body = [info.detail, info.suggestion].filter(Boolean).join('\n');
       this.$snotify.error(body, info.title, { timeout: 0, closeOnClick: true });
+    },
+
+    showDbError(error) {
+      this.dbError = error;
     },
 
     openKvMetadata(key) {
@@ -713,7 +726,12 @@ export default {
     async loadData() {
       this.loading = true;
       try {
-        await initDB((msg) => this.setStatus(msg));
+        try {
+          await initDB((msg) => this.setStatus(msg));
+        } catch (e) {
+          this.showDbError(e);
+          return; // Fatal — nothing else can happen.
+        }
 
         // Single bootstrap: schema + row count + row group size + KV/geo/file metadata.
         const meta = await bootstrapMetadata(this.source, (msg) => this.setStatus(msg));
