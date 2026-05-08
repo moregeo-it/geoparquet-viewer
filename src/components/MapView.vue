@@ -40,7 +40,9 @@ export default {
     viewportStale: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
     isDark: { type: Boolean, default: false },
-    bbox: { type: Array, default: null }
+    bbox: { type: Array, default: null },
+    initialCenter: { type: Array, default: null },
+    initialZoom: { type: Number, default: null }
   },
   emits: ['select', 'viewportChange', 'reloadViewport'],
   data() {
@@ -118,8 +120,8 @@ export default {
             }
           ]
         },
-        center: [0, 20],
-        zoom: 2,
+        center: this.initialCenter || [0, 20],
+        zoom: this.initialZoom ?? 2,
         attributionControl: true
       });
 
@@ -133,6 +135,8 @@ export default {
         this.updateLayers();
         this.updateBboxLayer();
         if (this.bounds) this.fitBounds();
+        // Initialise viewportBounds so reloadForViewport works before the user pans.
+        this.emitViewport();
       });
 
       // Emit viewport bounds on pan/zoom (debounced 400 ms)
@@ -146,7 +150,13 @@ export default {
     emitViewport() {
       if (!this.map) return;
       const b = this.map.getBounds();
-      this.$emit('viewportChange', [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      const center = this.map.getCenter();
+      const zoom = this.map.getZoom();
+      this.$emit('viewportChange', {
+        bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+        center: [center.lng, center.lat],
+        zoom
+      });
     },
 
     updateLayers() {

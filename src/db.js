@@ -246,6 +246,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   cacheSchemaGeomTypes(source, schema);
 
   // Attempt to get row group size from parquet_metadata() for better pagination defaults.
+  onProgress('Reading row group metadata...');
   let rowGroupSize = null;
   try {
     const statsResult = await query(
