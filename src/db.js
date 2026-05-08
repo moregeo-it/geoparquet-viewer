@@ -575,18 +575,22 @@ function buildWhereClause(filters, bbox = null, geoColumn = null, bboxCovering =
   return ' WHERE ' + conditions.join(' AND ');
 }
 
+const ALLOWED_BINARY_OPS = new Set(['=', '!=', '>', '>=', '<', '<=']);
+const ALLOWED_UNARY_OPS = new Set(['IS NULL', 'IS NOT NULL', 'IS TRUE', 'IS NOT TRUE', 'IS FALSE', 'IS NOT FALSE']);
+
 function buildFilterCondition(filter) {
   const col = `"${filter.column}"`;
   const val = escapeSource(String(filter.value));
 
-  switch (filter.operator) {
-    case 'LIKE':
-      return `CAST(${col} AS VARCHAR) ILIKE '%${val}%'`;
-    case 'IS NULL':
-      return `${col} IS NULL`;
-    case 'IS NOT NULL':
-      return `${col} IS NOT NULL`;
-    default:
-      return `${col} ${filter.operator} '${val}'`;
+  if (filter.operator === 'LIKE') {
+    return `CAST(${col} AS VARCHAR) ILIKE '%${val}%'`;
   }
+  if (ALLOWED_UNARY_OPS.has(filter.operator)) {
+    return `${col} ${filter.operator}`;
+  }
+  if (ALLOWED_BINARY_OPS.has(filter.operator)) {
+    return `${col} ${filter.operator} '${val}'`;
+  }
+  // Reject unknown operators — never interpolate arbitrary strings into SQL.
+  throw new Error(`Invalid filter operator: ${filter.operator}`);
 }
