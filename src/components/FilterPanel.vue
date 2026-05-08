@@ -1,66 +1,86 @@
 <template>
-  <div
-    class="pa-2 filter-panel"
-    style="border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity))"
-  >
-    <div class="d-flex align-center ga-2">
-      <span class="text-body-2 font-weight-bold">Filters</span>
-      <v-btn size="x-small" variant="tonal" prepend-icon="mdi-plus" @click="addFilter"> Add </v-btn>
-      <v-btn
-        v-if="localFilters.length > 0"
-        size="x-small"
-        variant="tonal"
-        color="error"
-        @click="clearFilters"
-      >
-        Clear
-      </v-btn>
-    </div>
-    <template v-if="localFilters.length > 0">
-      <div v-for="(filter, i) in localFilters" :key="i" class="d-flex align-center ga-1 mt-1">
-        <v-select
-          v-model="filter.column"
-          :items="columnNames"
-          density="compact"
-          variant="outlined"
-          hide-details
-          style="max-width: 180px"
-          placeholder="Column..."
-          @update:model-value="onColumnChange(filter)"
-        />
-        <v-select
-          v-model="filter.operator"
-          :items="operatorsForColumn(filter.column)"
-          item-title="label"
-          item-value="value"
-          density="compact"
-          variant="outlined"
-          hide-details
-          style="width: 110px; flex: 0 0 110px"
-        />
-        <v-text-field
-          v-if="!noValueOperators.includes(filter.operator)"
-          v-model="filter.value"
-          :type="inputTypeForColumn(filter.column)"
-          :error="filter.value === '' || filter.value == null"
-          density="compact"
-          variant="outlined"
-          hide-details
-          clearable
-          placeholder="Value..."
-          @keydown.enter="apply"
-        />
-        <v-btn icon size="x-small" variant="text" @click="removeFilter(i)">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </div>
-      <div class="mt-2">
-        <v-btn size="small" color="primary" variant="flat" :disabled="!canApply" @click="apply">
-          Apply Filters
-        </v-btn>
-      </div>
-    </template>
-  </div>
+  <v-expansion-panels>
+    <v-expansion-panel>
+      <v-expansion-panel-title class="pa-2">
+        <div class="d-flex align-center ga-2">
+          <v-icon size="medium">mdi-filter-outline</v-icon>
+          <span class="text-body-2 font-weight-bold">Filters</span>
+          <v-chip v-if="localFilters.length > 0" size="small" color="primary">
+            {{ localFilters.length }}
+          </v-chip>
+        </div>
+      </v-expansion-panel-title>
+      <v-expansion-panel-text>
+        <div class="filter-toolbar">
+          <v-btn size="x-small" variant="tonal" prepend-icon="mdi-plus" @click="addFilter">
+            Add
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            v-if="localFilters.length > 0"
+            size="x-small"
+            variant="tonal"
+            color="error"
+            @click="clearFilters"
+          >
+            Clear
+          </v-btn>
+          <v-btn
+            v-if="localFilters.length > 0"
+            size="x-small"
+            color="primary"
+            variant="flat"
+            :disabled="!canApply"
+            @click="apply"
+          >
+            Apply
+          </v-btn>
+        </div>
+        <div class="filter-panel-content">
+          <template v-if="localFilters.length > 0">
+            <div v-for="(filter, i) in localFilters" :key="i" class="d-flex align-center ga-1 mt-1">
+              <v-select
+                v-model="filter.column"
+                :items="columnNames"
+                density="compact"
+                variant="outlined"
+                hide-details
+                style="max-width: 180px"
+                placeholder="Column..."
+                @update:model-value="onColumnChange(filter)"
+              />
+              <v-select
+                v-model="filter.operator"
+                :items="operatorsForColumn(filter.column)"
+                item-title="label"
+                item-value="value"
+                density="compact"
+                variant="outlined"
+                hide-details
+                style="width: 110px; flex: 0 0 110px"
+              />
+              <v-text-field
+                v-if="!noValueOperators.includes(filter.operator)"
+                v-model="filter.value"
+                :type="inputTypeForColumn(filter.column)"
+                :error="filter.value === '' || filter.value == null"
+                density="compact"
+                variant="outlined"
+                hide-details
+                clearable
+                placeholder="Value..."
+                @keydown.enter="apply"
+              />
+              <v-btn icon size="x-small" variant="text" @click="removeFilter(i)">
+                <v-icon>mdi-close</v-icon>
+              </v-btn>
+            </div>
+          </template>
+          <div v-else class="text-body-2 text-center text-grey-darken-1 mt-1">No filters applied.</div>
+        </div>
+      </v-expansion-panel-text>
+    </v-expansion-panel>
+  </v-expansion-panels>
 </template>
 
 <script>
@@ -72,12 +92,16 @@ const ALL_OPERATORS = [
   { value: '<', label: '<' },
   { value: '<=', label: '≤' },
   { value: 'LIKE', label: 'contains' },
+  {value: 'IS TRUE', label: 'is true'},
+  {value: 'IS NOT TRUE', label: 'is not true'},
+  {value: 'IS FALSE', label: 'is false'},
+  {value: 'IS NOT FALSE', label: 'is not false'},
   { value: 'IS NULL', label: 'is null' },
   { value: 'IS NOT NULL', label: 'is not null' }
 ];
 
 const NUMERIC_OPERATORS = ['=', '!=', '>', '>=', '<', '<=', 'IS NULL', 'IS NOT NULL'];
-const BOOLEAN_OPERATORS = ['=', '!=', 'IS NULL', 'IS NOT NULL'];
+const BOOLEAN_OPERATORS = ['IS FALSE', 'IS TRUE', 'IS NOT TRUE', 'IS NOT FALSE', 'IS NULL', 'IS NOT NULL'];
 
 const NO_VALUE_OPS = ['IS NULL', 'IS NOT NULL'];
 
@@ -200,7 +224,18 @@ export default {
 </script>
 
 <style scoped>
-.filter-panel {
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: rgb(var(--v-theme-surface));
+  padding-bottom: 4px;
+}
+.filter-panel-content {
+  max-height: 140px;
+  overflow-y: auto;
 }
 </style>
