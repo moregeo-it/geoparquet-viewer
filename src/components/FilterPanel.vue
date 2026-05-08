@@ -104,6 +104,7 @@ const BOOLEAN_OPERATORS = [
   'IS NULL',
   'IS NOT NULL'
 ];
+const DEFAULT_OPERATORS = ['=', '!=', '>', '>=', '<', '<=', 'LIKE', 'IS NULL', 'IS NOT NULL'];
 
 const NO_VALUE_OPS = [
   'IS FALSE',
@@ -189,7 +190,7 @@ export default {
       } else if (isNumericType(type)) {
         allowed = new Set(NUMERIC_OPERATORS);
       } else {
-        return ALL_OPERATORS;
+        allowed = new Set(DEFAULT_OPERATORS);
       }
       return ALL_OPERATORS.filter((op) => allowed.has(op.value));
     },
@@ -200,17 +201,20 @@ export default {
       return 'text';
     },
     addFilter() {
+      const col = this.columns.length > 0 ? this.columns[0].name : '';
+      const ops = this.operatorsForColumn(col);
       this.localFilters.push({
-        column: this.columns.length > 0 ? this.columns[0].name : '',
-        operator: '=',
+        column: col,
+        operator: ops.length > 0 ? ops[0].value : '=',
         value: ''
       });
     },
     onColumnChange(filter) {
-      // Reset operator if it's not valid for the new column type
-      const valid = this.operatorsForColumn(filter.column).map((o) => o.value);
+      // Reset operator to first valid one if current is invalid for the new column type
+      const ops = this.operatorsForColumn(filter.column);
+      const valid = ops.map((o) => o.value);
       if (!valid.includes(filter.operator)) {
-        filter.operator = '=';
+        filter.operator = ops.length > 0 ? ops[0].value : '=';
       }
       filter.value = '';
     },
