@@ -11,26 +11,47 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 // Import WASM + worker assets as URLs so Vite copies them into the build output.
 import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import duckdb_worker_eh from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
+import httpfsExtUrl from '../extensions/httpfs.duckdb_extension.wasm?url';
+import spatialExtUrl from '../extensions/spatial.duckdb_extension.wasm?url';
+import parquetExtUrl from '../extensions/parquet.duckdb_extension.wasm?url';
+
+/** Resolve a Vite asset URL to an absolute HTTP URL for DuckDB's LOAD command. */
+const absExtUrl = (url) => new URL(url, location.href).href;
 
 let _db = null;
 let _conn = null;
 let _spatialLoaded = false;
 let _initPromise = null;
+let _lastProgressMsg = null;
 
 // Cache: source → { geoColumn → boolean } for isGeometryType results.
 // Avoids repeated DESCRIBE queries on every queryData/queryCount call.
 const _geomTypeCache = new Map();
 
+const _progressListeners = new Set();
+
+function _emitProgress(msg) {
+  _lastProgressMsg = msg; // Cache last message for late-joining listeners during init.
+  for (const fn of _progressListeners) fn(msg); // Emit to all listeners.
+}
+
 /**
  * Initialize DuckDB-WASM with required extensions.
  * WASM bundles are self-hosted (no external CDN dependency).
  */
-export async function initDB(onProgress = () => {}) {
-  if (_db) return { db: _db, conn: _conn };
+export async function initDB(onProgress) {
+  if (_db && _conn) return { db: _db, conn: _conn };
+
+  // Register late-joining progress listener so callers see remaining init steps.
+  if (onProgress) {
+    _progressListeners.add(onProgress);
+    if (_lastProgressMsg) onProgress(_lastProgressMsg);
+  }
+
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    onProgress('Starting DuckDB...');
+    _emitProgress('Starting DuckDB...');
 
     // Always use EH (exception handling) bundle — required for spatial/PROJ operations.
     const mainModule = duckdb_wasm_eh;
@@ -41,7 +62,7 @@ export async function initDB(onProgress = () => {}) {
     _db = new duckdb.AsyncDuckDB(logger, worker);
     await _db.instantiate(mainModule);
 
-    onProgress('Opening database...');
+    _emitProgress('Opening database...');
     try {
       await _db.open({
         query: {
@@ -57,34 +78,35 @@ export async function initDB(onProgress = () => {}) {
 
     // Workaround for DuckDB-WASM PROJ initialization timing issue (#2199):
     // Load coordinate system data BEFORE loading spatial extension.
-    onProgress('Preloading coordinate systems...');
+    _emitProgress('Preloading coordinate systems...');
     try {
       await _conn.query(`SELECT * FROM duckdb_coordinate_systems()`);
     } catch (e) {
       console.warn('Could not preload coordinate systems:', e.message);
     }
 
-    onProgress('Loading httpfs extension...');
-    try {
-      await _conn.query(`INSTALL httpfs`);
-      await _conn.query(`LOAD httpfs`);
-      onProgress('httpfs extension loaded.');
-    } catch (e) {
-      console.warn('httpfs extension not available:', e.message);
-      onProgress('httpfs extension unavailable — HTTP sources will not work.');
-    }
+    const loadExtension = async (name, url, unavailableMsg) => {
+      _emitProgress(`Loading ${name} extension...`);
+      try {
+        await _conn.query(`LOAD '${absExtUrl(url)}'`);
+        _emitProgress(`${name} extension loaded.`);
+        return true;
+      } catch (e) {
+        console.warn(`${name} extension not available:`, e.message);
+        _emitProgress(`${name} extension unavailable — ${unavailableMsg}`);
+        return false;
+      }
+    };
 
-    onProgress('Loading spatial extension...');
-    try {
-      await _conn.query(`INSTALL spatial`);
-      await _conn.query(`LOAD spatial`);
-      _spatialLoaded = true;
-      onProgress('Spatial extension loaded.');
-    } catch (e) {
-      console.warn('Spatial extension not available:', e.message);
-      onProgress('Spatial extension unavailable — using client-side WKB parsing.');
-    }
+    await loadExtension('parquet', parquetExtUrl, 'No data can be loaded.');
+    await loadExtension('httpfs', httpfsExtUrl, 'All files will be fully loaded into memory.');
+    _spatialLoaded = await loadExtension(
+      'spatial',
+      spatialExtUrl,
+      'Only WGS84-based datasets will show on the map.'
+    );
 
+    _progressListeners.clear();
     return { db: _db, conn: _conn };
   })();
 
@@ -218,7 +240,7 @@ function geomExpr(geoColumn, alreadyGeometry) {
  *
  * @param {string} source - Parquet source path.
  * @param {Function} onProgress - Status callback.
- * @returns {Promise<{schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema}>}
+ * @returns {Promise<{schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema, columnSizes}>}
  */
 export async function bootstrapMetadata(source, onProgress = () => {}) {
   const escaped = escapeSource(source);
@@ -309,7 +331,32 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     console.warn('Could not read parquet schema:', e.message);
   }
 
-  return { schema, totalRows, rowGroupSize, fileInfo, kvMetadata, geoMetadata, parquetSchema };
+  // 5. Column sizes for first row group (used for load-time warnings)
+  let columnSizes = null;
+  try {
+    const colSizeResult = await query(
+      `SELECT path_in_schema, total_compressed_size
+       FROM parquet_metadata('${escaped}')
+       WHERE row_group_id = 0`
+    );
+    columnSizes = {};
+    for (const row of colSizeResult.toArray()) {
+      columnSizes[String(row.path_in_schema)] = Number(row.total_compressed_size);
+    }
+  } catch (e) {
+    console.warn('Could not read column sizes:', e.message);
+  }
+
+  return {
+    schema,
+    totalRows,
+    rowGroupSize,
+    fileInfo,
+    kvMetadata,
+    geoMetadata,
+    parquetSchema,
+    columnSizes
+  };
 }
 
 /**
