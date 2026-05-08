@@ -135,7 +135,7 @@ export default {
         this.updateLayers();
         this.updateBboxLayer();
         if (this.bounds) this.fitBounds();
-        // Emit initial viewport so App can trigger viewport-filtered loading
+        // Initialise viewportBounds so reloadForViewport works before the user pans.
         this.emitViewport();
       });
 
