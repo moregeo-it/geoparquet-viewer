@@ -17,6 +17,7 @@ let _conn = null;
 let _worker = null;
 let _initPromise = null;
 let _lastProgressMsg = null;
+let _currentReader = null;
 
 // Cache: source → { geoColumn → boolean } for isGeometryType results.
 // Avoids repeated DESCRIBE queries on every queryData/queryCount call.
@@ -88,15 +89,6 @@ export async function initDB(onProgress) {
     _emitProgress('Connection to database...');
     _conn = await _db.connect();
 
-    // Workaround for DuckDB-WASM PROJ initialization timing issue (#2199):
-    // Load coordinate system data BEFORE loading spatial extension.
-    _emitProgress('Preloading coordinate systems...');
-    try {
-      await _conn.query(`SELECT * FROM duckdb_coordinate_systems()`);
-    } catch (e) {
-      throw new Error('Failed to load coordinate reference systems', { cause: e });
-    }
-
     const loadExtension = async (name, url, unavailableMsg) => {
       _emitProgress(`Loading ${name} extension...`);
       try {
@@ -130,12 +122,16 @@ export async function getConnection() {
  * Execute a SQL query and return an Arrow Table.
  */
 export async function query(sql) {
-  console.log('Executing query:', sql);
   const conn = await getConnection();
-  const result = await conn.send(sql)
-  const allResults = await result.readAll();
-
-  return new arrow.Table(allResults);
+  const reader = await conn.send(sql);
+  _currentReader = reader;
+  try {
+    const allResults = await reader.readAll();
+    return new arrow.Table(allResults);
+  } finally {
+    _currentReader = null;
+    await reader.cancel(); // Close the Arrow stream reader; safe after readAll() and during cancellation.
+  }
 }
 
 /**
@@ -166,6 +162,15 @@ export function escapeSource(source) {
 }
 
 export async function cancelSentqueries() {
+  const reader = _currentReader;
+  if (reader) {
+    _currentReader = null;
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
   if (_conn) {
     try {
       await _conn.cancelSent();
@@ -282,7 +287,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   let totalRows = -1;
   try {
     const fileResult = await query(
-      `SELECT * EXCLUDE (column_orders,footer_signing_key_metadata) FROM parquet_file_metadata('${escaped}')`
+      `SELECT * EXCLUDE (footer_signing_key_metadata) FROM parquet_file_metadata('${escaped}')`
     );
     const row = fileResult.toArray()[0];
     fileInfo = {};

@@ -53,13 +53,6 @@ async function init() {
     }
     _conn = await _db.connect();
 
-    // Preload coordinate systems before spatial (DuckDB-WASM PROJ init quirk).
-    try {
-      await _conn.query(`SELECT * FROM duckdb_coordinate_systems()`);
-    } catch {
-      /* ignore */
-    }
-
     status('Loading extensions...');
     try {
       await _conn.query(`INSTALL httpfs`);
