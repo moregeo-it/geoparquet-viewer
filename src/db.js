@@ -7,11 +7,14 @@
  * All WASM/worker assets are bundled locally — no external CDN dependency at runtime.
  */
 
+import * as arrow from 'apache-arrow';
+
 /** Resolve a Vite asset URL to an absolute HTTP URL for DuckDB's LOAD command. */
 const absExtUrl = (url) => new URL(url, location.href).href;
 
 let _db = null;
 let _conn = null;
+let _worker = null;
 let _initPromise = null;
 let _lastProgressMsg = null;
 
@@ -72,10 +75,10 @@ export async function initDB(onProgress) {
 
     _emitProgress('Starting DuckDB...');
 
-    let worker = new Worker(mainWorker);
+    _worker = new Worker(mainWorker);
 
     const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
-    _db = new duckdb.AsyncDuckDB(logger, worker);
+    _db = new duckdb.AsyncDuckDB(logger, _worker);
 
     await _db.instantiate(mainModule);
 
@@ -127,8 +130,12 @@ export async function getConnection() {
  * Execute a SQL query and return an Arrow Table.
  */
 export async function query(sql) {
+  console.log('Executing query:', sql);
   const conn = await getConnection();
-  return await conn.query(sql);
+  const result = await conn.send(sql)
+  const allResults = await result.readAll();
+
+  return new arrow.Table(allResults);
 }
 
 /**
@@ -156,6 +163,16 @@ export async function dropFile(name) {
  */
 export function escapeSource(source) {
   return source.replace(/'/g, "''");
+}
+
+export async function cancelSentqueries() {
+  if (_conn) {
+    try {
+      await _conn.cancelSent();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**

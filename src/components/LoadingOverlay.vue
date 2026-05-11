@@ -3,6 +3,10 @@
     <div class="loading-content">
       <v-progress-circular indeterminate color="primary" size="48" width="4" />
       <p v-if="message" class="text-body-2 text-grey-darken-1 mt-4">{{ message }}</p>
+
+      <v-btn size="small" variant="outlined" class="mt-4" @click="cancel">
+        Cancel
+      </v-btn>
     </div>
   </div>
 </template>
@@ -11,7 +15,13 @@
 export default {
   name: 'LoadingOverlay',
   props: {
-    message: { type: String, default: '' }
+    message: { type: String, default: '' },
+  },
+  emits: ['cancel'],
+  methods: {
+    cancel() {
+      this.$emit('cancel');
+    }
   }
 };
 </script>
