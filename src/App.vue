@@ -802,7 +802,7 @@ export default {
       this.urlInit = null;
 
       this._runTask('Loading data...', async () => {
-        await this.executeQuery(0);
+        await this.executeQuery();
         return `Loaded ${this.loadedCount.toLocaleString()} of ${this.totalRows.toLocaleString()} rows.`;
       });
     },
@@ -883,7 +883,7 @@ export default {
           this.sourceCrsString,
           this.bboxCoveringMeta
         );
-        await this.executeQuery(0);
+        await this.executeQuery();
         return `Filter matched ${this.filteredCount.toLocaleString()} rows. Showing ${this.loadedCount.toLocaleString()}.`;
       });
     },
@@ -891,7 +891,7 @@ export default {
     /**
      * Execute query and append results to rows and GeoArrow map data.
      */
-    async executeQuery(offset, limit = this.pageSize) {
+    async executeQuery(offset = 0, limit = this.pageSize) {
       // Build explicit column list: visible columns + geo column.
       // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
       const tableColNames = this.visibleColumns.map((c) => c.name);
@@ -1033,7 +1033,7 @@ export default {
       this.selectedIndex = null;
 
       this._runTask('Loading data in viewport...', async () => {
-        await this.executeQuery(0);
+        await this.executeQuery();
         if (gen !== this.viewportGeneration) {
           return '';
         }
