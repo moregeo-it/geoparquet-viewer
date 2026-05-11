@@ -25,7 +25,11 @@
           class="content-panels d-flex flex-grow-1"
           style="min-height: 0; position: relative"
         >
-          <LoadingOverlay v-if="initialLoading" :message="statusMessage" @cancel="cancelCurrentQuery" />
+          <LoadingOverlay
+            v-if="initialLoading"
+            :message="statusMessage"
+            @cancel="cancelCurrentQuery"
+          />
           <div class="left-panel d-flex flex-column">
             <FilterPanel
               v-if="visibleColumns.length > 0"
@@ -604,24 +608,26 @@ export default {
     _runTask(message, work) {
       return new Promise((resolve, reject) => {
         this.loading = true;
-        this.$snotify.async(message, () =>
-          work()
-            .then((successMsg) => {
-              this.loading = false;
-              resolve();
-              return { body: successMsg, config: { timeout: 4000 } };
-            })
-            .catch((err) => {
-              this.loading = false;
-              console.error(err);
-              const info = Utils.friendlyError(err);
-              reject(err);
-              throw {
-                title: info.title,
-                body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
-                config: { timeout: 0, closeOnClick: true }
-              };
-            }),
+        this.$snotify.async(
+          message,
+          () =>
+            work()
+              .then((successMsg) => {
+                this.loading = false;
+                resolve();
+                return { body: successMsg, config: { timeout: 4000 } };
+              })
+              .catch((err) => {
+                this.loading = false;
+                console.error(err);
+                const info = Utils.friendlyError(err);
+                reject(err);
+                throw {
+                  title: info.title,
+                  body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
+                  config: { timeout: 0, closeOnClick: true }
+                };
+              }),
           {
             closeOnClick: false,
             timeout: 0,
@@ -632,7 +638,7 @@ export default {
                   this.loading = false;
                   this.$snotify.remove(t.id);
                   this.cancelCurrentQuery();
-                },
+                }
               }
             ]
           }
