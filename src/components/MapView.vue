@@ -30,6 +30,12 @@ const SELECTED_LINE_LIGHT = [230, 120, 0, 255];
 const SELECTED_FILL_DARK = [255, 183, 77, 180];
 const SELECTED_LINE_DARK = [255, 160, 0, 255];
 
+const SMARTMAPS_ATTRIBUTION =
+  '© <a href="https://smartmaps.net/copyright" target="_blank">SmartMaps</a> | © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>';
+
+// This key will be public in the app anyway, so no point hiding it in the repo. It is restricted to our domain as well.
+const SMARTMAPS_API_KEY = 'RZ9NY1Om3Bnl4v5kH5EV%2BQHle1IQcjkHo3AcBxItGuVMk2n4ynrWUH3IGCG%2BBODC';
+
 export default {
   name: 'MapView',
   props: {
@@ -68,6 +74,7 @@ export default {
     },
     isDark() {
       this.updateLayers();
+      this.updateBasemap();
     },
     bounds() {
       this.fitBounds();
@@ -88,6 +95,20 @@ export default {
     }
   },
   methods: {
+    getSmartMapsTileUrl() {
+      const theme = this.isDark ? 'dark' : 'light';
+      return `https://tiles.smartmaps.cloud/tiles/v1/smartmaps/${theme}/{z}/{x}/{y}.webp?apiKey=${SMARTMAPS_API_KEY}`;
+    },
+
+    updateBasemap() {
+      if (!this.map || !this.ready) return;
+      const source = this.map.getSource('smartmaps');
+      if (source && typeof source.setTiles === 'function') {
+        source.setTiles([this.getSmartMapsTileUrl()]);
+        this.map.triggerRepaint();
+      }
+    },
+
     rowIndex(row) {
       if (!row) return null;
       const value = row.__index;
@@ -102,19 +123,18 @@ export default {
         style: {
           version: 8,
           sources: {
-            osm: {
+            smartmaps: {
               type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tiles: [this.getSmartMapsTileUrl()],
               tileSize: 256,
-              attribution:
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              attribution: SMARTMAPS_ATTRIBUTION
             }
           },
           layers: [
             {
-              id: 'osm',
+              id: 'smartmaps',
               type: 'raster',
-              source: 'osm',
+              source: 'smartmaps',
               minzoom: 0,
               maxzoom: 19
             }
@@ -132,6 +152,7 @@ export default {
 
       this.map.on('load', () => {
         this.ready = true;
+        this.updateBasemap();
         this.updateLayers();
         this.updateBboxLayer();
         if (this.bounds) this.fitBounds();
