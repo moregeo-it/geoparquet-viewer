@@ -26,7 +26,7 @@
           style="min-height: 0; position: relative"
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
-          <div class="left-panel d-flex flex-column">
+          <div :class="['left-panel', 'd-flex', 'flex-column', { 'left-panel--full': !primaryGeoColumn }]">
             <FilterPanel
               v-if="visibleColumns.length > 0"
               :columns="visibleColumns"
@@ -56,7 +56,7 @@
               </v-btn>
             </div>
           </div>
-          <div class="right-panel">
+          <div v-if="primaryGeoColumn" class="right-panel">
             <MapView
               ref="mapView"
               :geo-arrow-results="geoArrowResults"
@@ -1235,6 +1235,11 @@ export default {
   height: 100%;
 }
 
+.left-panel--full {
+  width: 100%;
+  border-right: none;
+}
+
 .table-wrapper {
   flex: 1;
   overflow-y: auto;
@@ -1262,6 +1267,10 @@ export default {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+  .left-panel--full {
+    height: 100% !important;
+    border-bottom: none !important;
   }
   .right-panel {
     height: 50%;
