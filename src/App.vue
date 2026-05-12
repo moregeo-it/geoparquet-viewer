@@ -671,9 +671,10 @@ export default {
 
     // ── Data loading ──────────────────────────────────────
     async loadFromUrl(url) {
+      this.reset();
+      this.setStatus('Resolving URL...');
       const resolvedUrl = await resolveCloudUrl(url);
 
-      this.reset();
       this.source = resolvedUrl;
       this.displaySource = resolvedUrl;
       this._skipInitialFit = !!this.urlInit?.center;
