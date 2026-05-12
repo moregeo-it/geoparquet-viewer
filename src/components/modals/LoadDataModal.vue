@@ -77,23 +77,23 @@ export default {
         },
         {
           url: 'https://data.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
-          title: 'Energy performance certificates in Wolverhampton, UK (2 MB, polygons)'
+          title: 'Energy performance certificates in Wolverhampton, UK (2 MB, points)'
         },
         {
           url: 'https://data.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
           title: 'Field boundaries for North Rhine-Westphalia, Germany (254 MB, polygons)'
         },
         {
-          url: 'https://data.source.coop/henryspatialanalysis/openpois/latest/osm-parquet/primary_tag=leisure/part-0.parquet',
-          title: 'Open POIs with leisure tag in the US (430 MB, points)'
-        },
-        {
           url: 'https://data.source.coop/fiboa/japan/japan.parquet',
           title: 'Field boundaries for Japan (4.5 GB, polygons)'
         },
         {
-          url: 'https://data.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IND/IND.parquet',
-          title: 'Open buildings in India (60 GB, polygons)'
+          url: 'https://data.source.coop/fiboa/france-ec/france_eurocrops_2018_fiboa.parquet',
+          title: 'EuroCrops 2018 for France (6 GB, polygons)'
+        },
+        {
+          url: 'https://data.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IDN/IDN.parquet',
+          title: 'Open buildings in Indonesia (16 GB, polygons)'
         }
       ]
     };
