@@ -31,10 +31,7 @@ const SELECTED_FILL_DARK = [255, 183, 77, 180];
 const SELECTED_LINE_DARK = [255, 160, 0, 255];
 
 const SMARTMAPS_ATTRIBUTION =
-  '© <a href="https://smartmaps.net/copyright" target="_blank">SmartMaps</a> | © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>';
-
-// This key will be public in the app anyway, so no point hiding it in the repo. It is restricted to our domain as well.
-const SMARTMAPS_API_KEY = 'RZ9NY1Om3Bnl4v5kH5EV%2BQHle1IQcjkHo3AcBxItGuVMk2n4ynrWUH3IGCG%2BBODC';
+  '© <a href="https://smartmaps.net/copyright" target="_blank" rel="noopener noreferrer">SmartMaps</a> | © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>';
 
 export default {
   name: 'MapView',
@@ -97,7 +94,7 @@ export default {
   methods: {
     getSmartMapsTileUrl() {
       const theme = this.isDark ? 'dark' : 'light';
-      return `https://tiles.smartmaps.cloud/tiles/v1/smartmaps/${theme}/{z}/{x}/{y}.webp?apiKey=${SMARTMAPS_API_KEY}`;
+      return `https://tiles.smartmaps.cloud/tiles/v1/smartmaps/${theme}/{z}/{x}/{y}.webp?apiKey=${import.meta.env.VITE_SMARTMAPS_API_KEY}`;
     },
 
     updateBasemap() {
