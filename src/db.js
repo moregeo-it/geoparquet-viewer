@@ -265,7 +265,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   let totalRows = -1;
   try {
     const fileResult = await query(
-      `SELECT * EXCLUDE (column_orders,footer_signing_key_metadata) FROM parquet_file_metadata('${escaped}')`
+      `SELECT * FROM parquet_file_metadata('${escaped}')`
     );
     const row = fileResult.toArray()[0];
     fileInfo = {};
