@@ -11,7 +11,7 @@
           />
         </a>
         <span>GeoParquet Viewer</span>
-        <v-chip size="x-small" :color="versionColor">v{{ version }}</v-chip>
+        <v-chip size="small" :color="versionColor">v{{ version }}</v-chip>
       </v-app-bar-title>
       <AppBarMenu :menu-groups="menuGroups" :is-mobile="isMobile" />
     </v-app-bar>
@@ -333,18 +333,21 @@ export default {
     };
   },
   computed: {
-    versionColor() {
+    isStable() {
       if (this.version.startsWith('0.')) {
-        return 'warning';
+        return false;
       }
       if (
         this.version.includes('alpha') ||
         this.version.includes('beta') ||
         this.version.includes('rc')
       ) {
-        return 'warning';
+        return false;
       }
-      return 'info';
+      return true;
+    },
+    versionColor() {
+      return this.isStable ? 'info' : 'warning';
     },
     /** The primary geometry column name from GeoParquet metadata or schema detection */
     primaryGeoColumn() {
@@ -507,7 +510,7 @@ export default {
       }));
     },
     menuGroups() {
-      return [
+      const groups = [
         {
           items: [
             {
@@ -572,6 +575,17 @@ export default {
           ]
         }
       ].filter(Boolean);
+      if (!this.isStable) {
+        groups.unshift({
+          items: [
+            {
+              title: 'Provide feedback',
+              href: 'https://github.com/moregeo-it/geoparquet-viewer/discussions',
+            }
+          ]
+        });
+      }
+      return groups;
     }
   },
   async mounted() {
