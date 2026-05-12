@@ -33,6 +33,7 @@ const SELECTED_LINE_DARK = [255, 160, 0, 255];
 const SMARTMAPS_ATTRIBUTION =
   '© <a href="https://smartmaps.net/copyright" target="_blank" rel="noopener noreferrer">SmartMaps</a> | © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>';
 
+const SMARTMAPS_API_KEY = 'RZ9NY1Om3Bnl4v5kH5EV%2BQHle1IQcjkHo3AcBxItGuVMk2n4ynrWUH3IGCG%2BBODC';
 export default {
   name: 'MapView',
   props: {
@@ -94,7 +95,7 @@ export default {
   methods: {
     getSmartMapsTileUrl() {
       const theme = this.isDark ? 'dark' : 'light';
-      return `https://tiles.smartmaps.cloud/tiles/v1/smartmaps/${theme}/{z}/{x}/{y}.webp?apiKey=${import.meta.env.VITE_SMARTMAPS_API_KEY}`;
+      return `https://tiles.smartmaps.cloud/tiles/v1/smartmaps/${theme}/{z}/{x}/{y}.webp?apiKey=${SMARTMAPS_API_KEY}`;
     },
 
     updateBasemap() {
