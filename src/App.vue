@@ -25,7 +25,11 @@
           class="content-panels d-flex flex-grow-1"
           style="min-height: 0; position: relative"
         >
-          <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
+          <LoadingOverlay
+            v-if="initialLoading"
+            :message="statusMessage"
+            @cancel="cancelCurrentQuery"
+          />
           <div class="left-panel d-flex flex-column">
             <FilterPanel
               v-if="visibleColumns.length > 0"
@@ -187,7 +191,8 @@ import {
   bootstrapMetadata,
   queryData,
   queryCount,
-  transformBbox
+  transformBbox,
+  cancelSentqueries
 } from './db.js';
 import { buildGeoArrowTables, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
 import Utils, { checkFileHealth, DEFAULT_PAGE_SIZE } from './utils.js';
@@ -603,24 +608,40 @@ export default {
     _runTask(message, work) {
       return new Promise((resolve, reject) => {
         this.loading = true;
-        this.$snotify.async(message, () =>
-          work()
-            .then((successMsg) => {
-              this.loading = false;
-              resolve();
-              return { body: successMsg, config: { timeout: 4000 } };
-            })
-            .catch((err) => {
-              this.loading = false;
-              console.error(err);
-              const info = Utils.friendlyError(err);
-              reject(err);
-              throw {
-                title: info.title,
-                body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
-                config: { timeout: 0, closeOnClick: true }
-              };
-            })
+        this.$snotify.async(
+          message,
+          () =>
+            work()
+              .then((successMsg) => {
+                this.loading = false;
+                resolve();
+                return { body: successMsg, config: { timeout: 4000 } };
+              })
+              .catch((err) => {
+                this.loading = false;
+                console.error(err);
+                const info = Utils.friendlyError(err);
+                reject(err);
+                throw {
+                  title: info.title,
+                  body: [info.detail, info.suggestion].filter(Boolean).join('\n'),
+                  config: { timeout: 0, closeOnClick: true }
+                };
+              }),
+          {
+            closeOnClick: false,
+            timeout: 0,
+            buttons: [
+              {
+                text: 'Cancel',
+                action: (t) => {
+                  this.loading = false;
+                  this.$snotify.remove(t.id);
+                  this.cancelCurrentQuery();
+                }
+              }
+            ]
+          }
         );
       });
     },
@@ -1133,6 +1154,24 @@ export default {
           this.conversionToastId = null;
         }
       });
+    },
+
+    async cancelCurrentQuery() {
+      try {
+        this.statusMessage = 'Cancelling query...';
+        await cancelSentqueries();
+      } catch (e) {
+        console.warn('Failed to cancel query:', e.message);
+        this.$snotify.error('Failed to cancel query.', { timeout: 3000 });
+      }
+
+      this.loading = false;
+      if (this.rows.length === 0) {
+        this.reset();
+        this.querySettingsOpen = false;
+        this.loadDialogOpen = true;
+        return;
+      }
     },
 
     cancelConversion() {

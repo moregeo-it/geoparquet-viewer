@@ -7,13 +7,17 @@
  * All WASM/worker assets are bundled locally — no external CDN dependency at runtime.
  */
 
+import * as arrow from 'apache-arrow';
+
 /** Resolve a Vite asset URL to an absolute HTTP URL for DuckDB's LOAD command. */
 const absExtUrl = (url) => new URL(url, location.href).href;
 
 let _db = null;
 let _conn = null;
+let _worker = null;
 let _initPromise = null;
 let _lastProgressMsg = null;
+let _currentReader = null;
 
 // Cache: source → { geoColumn → boolean } for isGeometryType results.
 // Avoids repeated DESCRIBE queries on every queryData/queryCount call.
@@ -72,10 +76,10 @@ export async function initDB(onProgress) {
 
     _emitProgress('Starting DuckDB...');
 
-    let worker = new Worker(mainWorker);
+    _worker = new Worker(mainWorker);
 
     const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
-    _db = new duckdb.AsyncDuckDB(logger, worker);
+    _db = new duckdb.AsyncDuckDB(logger, _worker);
 
     await _db.instantiate(mainModule);
 
@@ -84,15 +88,6 @@ export async function initDB(onProgress) {
 
     _emitProgress('Connection to database...');
     _conn = await _db.connect();
-
-    // Workaround for DuckDB-WASM PROJ initialization timing issue (#2199):
-    // Load coordinate system data BEFORE loading spatial extension.
-    _emitProgress('Preloading coordinate systems...');
-    try {
-      await _conn.query(`SELECT * FROM duckdb_coordinate_systems()`);
-    } catch (e) {
-      throw new Error('Failed to load coordinate reference systems', { cause: e });
-    }
 
     const loadExtension = async (name, url, unavailableMsg) => {
       _emitProgress(`Loading ${name} extension...`);
@@ -128,7 +123,15 @@ export async function getConnection() {
  */
 export async function query(sql) {
   const conn = await getConnection();
-  return await conn.query(sql);
+  const reader = await conn.send(sql);
+  _currentReader = reader;
+  try {
+    const allResults = await reader.readAll();
+    return new arrow.Table(allResults);
+  } finally {
+    _currentReader = null;
+    await reader.cancel(); // Close the Arrow stream reader; safe after readAll() and during cancellation.
+  }
 }
 
 /**
@@ -156,6 +159,25 @@ export async function dropFile(name) {
  */
 export function escapeSource(source) {
   return source.replace(/'/g, "''");
+}
+
+export async function cancelSentqueries() {
+  const reader = _currentReader;
+  if (reader) {
+    _currentReader = null;
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+  if (_conn) {
+    try {
+      await _conn.cancelSent();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
@@ -265,7 +287,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   let totalRows = -1;
   try {
     const fileResult = await query(
-      `SELECT * EXCLUDE (column_orders,footer_signing_key_metadata) FROM parquet_file_metadata('${escaped}')`
+      `SELECT * EXCLUDE (footer_signing_key_metadata) FROM parquet_file_metadata('${escaped}')`
     );
     const row = fileResult.toArray()[0];
     fileInfo = {};
