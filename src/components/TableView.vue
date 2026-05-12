@@ -288,7 +288,7 @@ export default {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 20px;
-  overflow: scroll;
+  overflow: auto;
   text-overflow: none;
 }
 .table-wrapper :deep(.selected-row.light) {
