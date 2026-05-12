@@ -26,7 +26,14 @@
           style="min-height: 0; position: relative"
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
-          <div :class="['left-panel', 'd-flex', 'flex-column', { 'left-panel--full': !primaryGeoColumn }]">
+          <div
+            :class="[
+              'left-panel',
+              'd-flex',
+              'flex-column',
+              { 'left-panel--full': !primaryGeoColumn }
+            ]"
+          >
             <FilterPanel
               v-if="visibleColumns.length > 0"
               :columns="visibleColumns"
