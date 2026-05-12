@@ -12,7 +12,7 @@
       :headers="tableHeaders"
       :items="rows"
       item-value="__index"
-      :item-height="rowHeight"
+      :item-height="40"
       density="compact"
       fixed-header
       hover
@@ -47,37 +47,40 @@
             v-for="col in cols"
             :key="col.key"
             :class="{
+              cell: true,
               'text-center': item[col.key] === null || item[col.key] === undefined,
               'text-right': col.key === '__index' || NUMERIC_TYPE_RE.test(col.subtitle ?? '')
             }"
           >
-            <span v-if="col.key === '__index'" class="text-grey text-caption">{{
-              item.__index + 1
-            }}</span>
-            <span
-              v-else-if="item[col.key] === null || item[col.key] === undefined"
-              class="text-grey text-caption font-italic"
-              >n/a</span
-            >
-            <a
-              v-else-if="isUrl(col.subtitle, item[col.key])"
-              :href="item[col.key]"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="cell-url"
-              @click.stop
-              >{{ item[col.key] }}</a
-            >
-            <span v-else-if="isFormattableTemporal(col.subtitle)">
-              {{ item[col.key] }}
-              <template v-if="formatTemporalValue(item[col.key], col.subtitle)">
-                <br />
-                <span class="text-grey font-italic cell-formatted-time">{{
-                  formatTemporalValue(item[col.key], col.subtitle)
-                }}</span>
-              </template>
-            </span>
-            <span v-else>{{ item[col.key] }}</span>
+            <div class="cell-content">
+              <span v-if="col.key === '__index'" class="text-grey text-caption">{{
+                item.__index + 1
+              }}</span>
+              <span
+                v-else-if="item[col.key] === null || item[col.key] === undefined"
+                class="text-grey text-caption font-italic"
+                >n/a</span
+              >
+              <a
+                v-else-if="isUrl(col.subtitle, item[col.key])"
+                :href="item[col.key]"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="cell-url"
+                @click.stop
+                >{{ item[col.key] }}</a
+              >
+              <span v-else-if="isFormattableTemporal(col.subtitle)">
+                {{ item[col.key] }}
+                <template v-if="formatTemporalValue(item[col.key], col.subtitle)">
+                  <br />
+                  <span class="text-grey font-italic cell-formatted-time">{{
+                    formatTemporalValue(item[col.key], col.subtitle)
+                  }}</span>
+                </template>
+              </span>
+              <span v-else>{{ item[col.key] }}</span>
+            </div>
           </td>
         </tr>
       </template>
@@ -104,7 +107,7 @@ export default {
         /^u?(tinyint|smallint|integer|bigint|hugeint|int\d*|float|double|real|decimal|numeric)(\([\d,\s]*\))?$/i
       ),
       // Matches a cell value that is entirely a URL
-      URL_RE: markRaw(/^https?:\/\/\S+$/i),
+      URL_RE: markRaw(/^\w{2,10}:\/\/\S+$/i),
       // Column types that can contain plain string URLs
       STRING_TYPE_RE: markRaw(
         /^(varchar|text|string|char(\(\d+\))?|bpchar|clob|mediumtext|longtext)$/i
@@ -116,9 +119,6 @@ export default {
     };
   },
   computed: {
-    rowHeight() {
-      return this.columns.some((col) => this.isFormattableTemporal(col.type)) ? 48 : 30;
-    },
     tableHeaders() {
       return [
         { title: '', key: '__index', width: 60, sortable: false, align: 'center' },
@@ -146,13 +146,17 @@ export default {
       this.$emit('select', item.__index === this.selectedIndex ? null : item.__index);
     },
     rowProps({ item }) {
+      const classes = [];
+      if (item.__index === this.selectedIndex) {
+        classes.push('selected-row');
+        if (this.isDark) {
+          classes.push('dark');
+        } else {
+          classes.push('light');
+        }
+      }
       return {
-        class:
-          item.__index === this.selectedIndex
-            ? this.isDark
-              ? 'selected-row-dark'
-              : 'selected-row-light'
-            : '',
+        class: classes,
         style: 'cursor: pointer'
       };
     },
@@ -263,11 +267,35 @@ export default {
 .table-wrapper :deep(.v-data-table) {
   height: 100%;
 }
-.table-wrapper :deep(.v-data-table__td) {
+.table-wrapper :deep(.cell) {
+  height: 40px;
+  max-width: 40vw;
+}
+.table-wrapper :deep(.selected-row .cell) {
+  height: fit-content;
+  max-height: 25vh;
+}
+.table-wrapper :deep(.cell-content) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.78rem;
+  height: fit-content;
+  max-height: 100%;
+  font-size: 14px;
+  line-height: 18px;
+}
+.table-wrapper :deep(.selected-row .cell-content) {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 20px;
+  overflow: scroll;
+  text-overflow: none;
+}
+.table-wrapper :deep(.selected-row.light) {
+  background-color: rgba(255, 152, 0, 0.18) !important;
+}
+.table-wrapper :deep(.selected-row.dark) {
+  background-color: rgba(255, 183, 77, 0.25) !important;
 }
 .table-header {
   background: rgb(var(--v-theme-surface));
@@ -293,14 +321,5 @@ export default {
 }
 .cell-formatted-time {
   font-size: 0.7rem;
-}
-</style>
-
-<style>
-.selected-row-light {
-  background-color: rgba(255, 152, 0, 0.18) !important;
-}
-.selected-row-dark {
-  background-color: rgba(255, 183, 77, 0.25) !important;
 }
 </style>
