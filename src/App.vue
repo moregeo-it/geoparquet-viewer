@@ -322,7 +322,7 @@ export default {
       kvMetadataInitialKey: null,
 
       // App details
-      version: version,
+      version: version
     };
   },
   computed: {
@@ -330,7 +330,11 @@ export default {
       if (this.version.startsWith('0.')) {
         return 'warning';
       }
-      if (this.version.includes('alpha') || this.version.includes('beta') || this.version.includes('rc')) {
+      if (
+        this.version.includes('alpha') ||
+        this.version.includes('beta') ||
+        this.version.includes('rc')
+      ) {
         return 'warning';
       }
       return 'info';
