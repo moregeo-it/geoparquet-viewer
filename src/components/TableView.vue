@@ -271,8 +271,11 @@ export default {
   height: 40px;
   max-width: 40vw;
 }
+.table-wrapper :deep(.selected-row) {
+  height: 40px; /* acts as min-height on tr */
+}
 .table-wrapper :deep(.selected-row .cell) {
-  height: fit-content;
+  height: auto;
   max-height: 25vh;
 }
 .table-wrapper :deep(.cell-content) {
