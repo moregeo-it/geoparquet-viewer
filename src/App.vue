@@ -11,7 +11,7 @@
           />
         </a>
         <span>GeoParquet Viewer</span>
-        <v-chip size="x-small" color="warning">experimental</v-chip>
+        <v-chip size="x-small" :color="versionColor">v{{ version }}</v-chip>
       </v-app-bar-title>
       <AppBarMenu :menu-groups="menuGroups" :is-mobile="isMobile" />
     </v-app-bar>
@@ -215,6 +215,8 @@ import KvMetadataModal, {
 import { startConversion } from './converter.js';
 import { shallowRef } from 'vue';
 
+import { version } from '../package.json';
+
 export default {
   name: 'App',
   components: {
@@ -317,10 +319,22 @@ export default {
       fileWarningOpen: false,
       fileWarnings: [],
 
-      kvMetadataInitialKey: null
+      kvMetadataInitialKey: null,
+
+      // App details
+      version: version,
     };
   },
   computed: {
+    versionColor() {
+      if (this.version.startsWith('0.')) {
+        return 'warning';
+      }
+      if (this.version.includes('alpha') || this.version.includes('beta') || this.version.includes('rc')) {
+        return 'warning';
+      }
+      return 'info';
+    },
     /** The primary geometry column name from GeoParquet metadata or schema detection */
     primaryGeoColumn() {
       if (this.geoMetadata?.primary_column) return this.geoMetadata.primary_column;
