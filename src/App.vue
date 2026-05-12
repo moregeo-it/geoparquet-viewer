@@ -673,7 +673,7 @@ export default {
     async loadFromUrl(url) {
       this.reset();
       this.setStatus('Resolving URL...');
-      const resolvedUrl = await resolveCloudUrl(url);
+      const resolvedUrl = resolveCloudUrl(url);
 
       this.source = resolvedUrl;
       this.displaySource = resolvedUrl;
