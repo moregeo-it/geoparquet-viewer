@@ -575,12 +575,12 @@ export default {
           ]
         }
       ].filter(Boolean);
-      if (!this.isStable) {
+      if (!this.isStable || version === '1.0.0') {
         groups.unshift({
           items: [
             {
               title: 'Provide feedback',
-              href: 'https://github.com/moregeo-it/geoparquet-viewer/discussions',
+              href: 'https://github.com/moregeo-it/geoparquet-viewer/discussions'
             }
           ]
         });
