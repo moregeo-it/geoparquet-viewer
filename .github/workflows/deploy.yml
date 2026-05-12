@@ -2,6 +2,8 @@ name: Deploy static content to Pages
 on:
   push:
     branches: ['main']
+env:
+  VITE_SMARTMAPS_API_KEY: ${{ secrets.VITE_SMARTMAPS_API_KEY }}
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -17,8 +19,6 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-        env:
-          VITE_SMARTMAPS_API_KEY: ${{ env.VITE_SMARTMAPS_API_KEY }}
       - name: Copy CNAME
         run: cp CNAME dist/
       - uses: peaceiris/actions-gh-pages@v3
