@@ -26,10 +26,7 @@
           style="min-height: 0; position: relative"
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
-          <Splitpanes
-            :horizontal="isMobile"
-            :dbl-click-splitter="false"
-          >
+          <Splitpanes :horizontal="isMobile" :dbl-click-splitter="false">
             <Pane :size="primaryGeoColumn ? 50 : 100" :min-size="15">
               <div class="left-panel d-flex flex-column">
                 <FilterPanel
