@@ -22,65 +22,67 @@
 
         <div
           v-if="source"
-          class="content-panels d-flex flex-grow-1"
+          class="content-panels flex-grow-1"
           style="min-height: 0; position: relative"
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
-          <div
-            :class="[
-              'left-panel',
-              'd-flex',
-              'flex-column',
-              { 'left-panel--full': !primaryGeoColumn }
-            ]"
+          <Splitpanes
+            :horizontal="isMobile"
+            :dbl-click-splitter="false"
           >
-            <FilterPanel
-              v-if="visibleColumns.length > 0"
-              :columns="visibleColumns"
-              :filters="filters"
-              @apply="applyFilters"
-            />
-            <TableView
-              :rows="rows"
-              :columns="visibleColumns"
-              :selectedIndex="selectedIndex"
-              :loading="loading"
-              :is-dark="isDark"
-              @select="onTableSelect"
-            />
-            <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2">
-              <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
-                Load more ({{ pageSize.toLocaleString() }} rows)
-              </v-btn>
-              <v-btn
-                v-if="remainingRows > pageSize"
-                size="small"
-                variant="outlined"
-                @click="confirmLoadAllIfLarge"
-                :disabled="loading"
-              >
-                Load all remaining ({{ remainingRows.toLocaleString() }} rows)
-              </v-btn>
-            </div>
-          </div>
-          <div v-if="primaryGeoColumn" class="right-panel">
-            <MapView
-              ref="mapView"
-              :geo-arrow-results="geoArrowResults"
-              :selectedIndex="selectedIndex"
-              :bounds="mapBounds"
-              :wkb-by-index="wkbByIndex"
-              :viewport-stale="viewportStale"
-              :loading="loading"
-              :is-dark="isDark"
-              :bbox="reprojectedBbox"
-              :initial-center="urlInit?.center"
-              :initial-zoom="urlInit?.zoom"
-              @select="onMapSelect"
-              @viewportChange="onViewportChange"
-              @reloadViewport="reloadForViewport"
-            />
-          </div>
+            <Pane :size="primaryGeoColumn ? 50 : 100" :min-size="15">
+              <div class="left-panel d-flex flex-column">
+                <FilterPanel
+                  v-if="visibleColumns.length > 0"
+                  :columns="visibleColumns"
+                  :filters="filters"
+                  @apply="applyFilters"
+                />
+                <TableView
+                  :rows="rows"
+                  :columns="visibleColumns"
+                  :selectedIndex="selectedIndex"
+                  :loading="loading"
+                  :is-dark="isDark"
+                  @select="onTableSelect"
+                />
+                <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2">
+                  <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
+                    Load more ({{ pageSize.toLocaleString() }} rows)
+                  </v-btn>
+                  <v-btn
+                    v-if="remainingRows > pageSize"
+                    size="small"
+                    variant="outlined"
+                    @click="confirmLoadAllIfLarge"
+                    :disabled="loading"
+                  >
+                    Load all remaining ({{ remainingRows.toLocaleString() }} rows)
+                  </v-btn>
+                </div>
+              </div>
+            </Pane>
+            <Pane v-if="primaryGeoColumn" :min-size="15">
+              <div class="right-panel">
+                <MapView
+                  ref="mapView"
+                  :geo-arrow-results="geoArrowResults"
+                  :selectedIndex="selectedIndex"
+                  :bounds="mapBounds"
+                  :wkb-by-index="wkbByIndex"
+                  :viewport-stale="viewportStale"
+                  :loading="loading"
+                  :is-dark="isDark"
+                  :bbox="reprojectedBbox"
+                  :initial-center="urlInit?.center"
+                  :initial-zoom="urlInit?.zoom"
+                  @select="onMapSelect"
+                  @viewportChange="onViewportChange"
+                  @reloadViewport="reloadForViewport"
+                />
+              </div>
+            </Pane>
+          </Splitpanes>
         </div>
 
         <div
@@ -221,6 +223,8 @@ import KvMetadataModal, {
 
 import { startConversion } from './converter.js';
 import { shallowRef } from 'vue';
+import { Splitpanes, Pane } from 'splitpanes';
+import 'splitpanes/dist/splitpanes.css';
 
 import { version } from '../package.json';
 
@@ -242,7 +246,9 @@ export default {
     SchemaModal,
     LoadAllModal,
     AppBarMenu,
-    DbInitErrorModal
+    DbInitErrorModal,
+    Splitpanes,
+    Pane
   },
   data() {
     return {
@@ -1247,18 +1253,10 @@ export default {
 }
 
 .left-panel {
-  width: 50%;
-  min-width: 300px;
-  border-right: 2px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   height: 100%;
-}
-
-.left-panel--full {
-  width: 100%;
-  border-right: none;
 }
 
 .table-wrapper {
@@ -1269,40 +1267,31 @@ export default {
 }
 
 .right-panel {
-  flex: 1;
-  min-width: 300px;
   overflow: hidden;
   height: 100%;
 }
 
+/* Splitpanes theme overrides */
+.content-panels .splitpanes__splitter {
+  background: rgba(var(--v-border-color), var(--v-border-opacity));
+  position: relative;
+}
+.content-panels .splitpanes--vertical > .splitpanes__splitter {
+  width: 5px;
+  min-width: 5px;
+}
+.content-panels .splitpanes--horizontal > .splitpanes__splitter {
+  height: 5px;
+  min-height: 5px;
+}
+.content-panels .splitpanes__splitter:hover,
+.content-panels .splitpanes__splitter:active {
+  background: rgb(var(--v-theme-primary));
+}
+
 @media (max-width: 768px) {
   .content-panels {
-    flex-direction: column !important;
     height: calc(100vh - 48px - 48px);
-  }
-  .left-panel {
-    width: 100% !important;
-    height: 50%;
-    border-right: none !important;
-    border-bottom: 2px solid rgba(var(--v-border-color), var(--v-border-opacity));
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .left-panel--full {
-    height: 100% !important;
-    border-bottom: none !important;
-  }
-  .right-panel {
-    height: 50%;
-    min-width: unset !important;
-    overflow: hidden;
-  }
-  .table-wrapper {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    min-height: 0;
   }
 }
 </style>
