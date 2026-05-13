@@ -373,15 +373,14 @@ export default {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  min-width: 0;
   flex-shrink: 0;
 }
+
 .col-type {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  flex-shrink: 1;
-  max-width: 70%;
+  flex: 1 1 0;
 }
 
 .query-settings .text-caption {
