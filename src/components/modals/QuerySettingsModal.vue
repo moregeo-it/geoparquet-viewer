@@ -67,7 +67,7 @@
               class="flex-grow-0"
             />
             <span class="text-body-2">{{ col.name }}</span>
-            <span class="text-caption text-grey ml-1">{{ col.type }}</span>
+            <span class="text-caption text-grey ml-1 col-type">{{ col.type }}</span>
           </label>
         </div>
         <div class="d-flex ga-2 mt-2">
@@ -367,6 +367,13 @@ export default {
 }
 .column-picker-item .v-selection-control {
   min-height: unset;
+}
+
+.col-type {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
 }
 
 .query-settings .text-caption {
