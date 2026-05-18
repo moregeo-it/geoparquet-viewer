@@ -27,7 +27,7 @@
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
           <Splitpanes :horizontal="isMobile" :dbl-click-splitter="false">
-            <Pane :size="primaryGeoColumn ? 50 : 100" :min-size="15">
+            <Pane :size="primaryGeoColumn ? 50 : 100">
               <div class="left-panel d-flex flex-column">
                 <FilterPanel
                   v-if="visibleColumns.length > 0"
@@ -59,7 +59,7 @@
                 </div>
               </div>
             </Pane>
-            <Pane v-if="primaryGeoColumn" :min-size="15">
+            <Pane v-if="primaryGeoColumn">
               <div class="right-panel">
                 <MapView
                   ref="mapView"
