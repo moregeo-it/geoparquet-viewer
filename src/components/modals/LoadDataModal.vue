@@ -52,7 +52,11 @@
       <v-card-actions>
         <v-spacer />
         <v-btn @click="$emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" :disabled="(!newUrl && !selectedFile) || Boolean(urlValidationError)" @click="submit"
+        <v-btn
+          color="primary"
+          variant="flat"
+          :disabled="(!newUrl && !selectedFile) || Boolean(urlValidationError)"
+          @click="submit"
           >Load</v-btn
         >
       </v-card-actions>
