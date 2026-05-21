@@ -329,7 +329,8 @@ export default {
       kvMetadataInitialKey: null,
 
       // App details
-      version: version
+      version: version,
+      urlInit: null
     };
   },
   computed: {
@@ -594,10 +595,6 @@ export default {
     // Parse URL state once — frozen object, never mutated after this.
     const urlState = Utils.parseUrlState();
     this.urlInit = urlState;
-
-    // Non-reactive map position (updated by onViewportChange, read by syncUrl)
-    this.mapCenter = urlState.center || null;
-    this.mapZoom = urlState.zoom ?? null;
 
     if (urlState.url) {
       this.loadFromUrl(urlState.url);
