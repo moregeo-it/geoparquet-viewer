@@ -27,7 +27,7 @@
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
           <Splitpanes :horizontal="isMobile" :dbl-click-splitter="false">
-            <Pane :size="primaryGeoColumn ? 50 : 100">
+            <Pane v-if="visibleColumns.length > 0" :size="primaryGeoColumn ? 50 : 100">
               <div class="left-panel d-flex flex-column">
                 <FilterPanel
                   v-if="visibleColumns.length > 0"
@@ -59,7 +59,7 @@
                 </div>
               </div>
             </Pane>
-            <Pane v-if="primaryGeoColumn">
+            <Pane v-if="primaryGeoColumn" :size="visibleColumns.length > 0 ? 50 : 100">
               <div class="right-panel">
                 <MapView
                   ref="mapView"
@@ -77,6 +77,20 @@
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
                 />
+                <div v-if="hasMore && visibleColumns.length === 0" class="map-load-more d-flex justify-center ga-2 pa-2">
+                  <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
+                    Load more geometry ({{ pageSize.toLocaleString() }} rows)
+                  </v-btn>
+                  <v-btn
+                    v-if="remainingRows > pageSize"
+                    size="small"
+                    variant="outlined"
+                    @click="confirmLoadAllIfLarge"
+                    :disabled="loading"
+                  >
+                    Load all ({{ remainingRows.toLocaleString() }} rows)
+                  </v-btn>
+                </div>
               </div>
             </Pane>
           </Splitpanes>
@@ -1266,6 +1280,18 @@ export default {
 .right-panel {
   overflow: hidden;
   height: 100%;
+  position: relative;
+}
+
+.map-load-more {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  background: rgba(var(--v-theme-surface), 0.85);
+  border-radius: 8px;
+  padding: 6px 12px;
 }
 
 /* Splitpanes theme overrides */
