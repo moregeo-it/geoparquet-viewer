@@ -74,8 +74,8 @@
               :loading="loading"
               :is-dark="isDark"
               :bbox="reprojectedBbox"
-              :initial-center="urlInit?.center"
-              :initial-zoom="urlInit?.zoom"
+              :initial-center="initialMapCenter"
+              :initial-zoom="initialMapZoom"
               @select="onMapSelect"
               @viewportChange="onViewportChange"
               @reloadViewport="reloadForViewport"
@@ -292,6 +292,8 @@ export default {
       queryBbox: null,
       mapZoom: null,
       mapCenter: null,
+      initialMapCenter: null,
+      initialMapZoom: null,
 
       // Viewport
       viewportBounds: null,
@@ -667,6 +669,8 @@ export default {
       this.source = url;
       this.displaySource = url;
       this._skipInitialFit = !!this.urlInit?.center;
+      this.initialMapZoom = this.urlInit?.zoom || null;
+      this.initialMapCenter = this.urlInit?.center || null;
 
       // Phase 1: quick HTTP health check (non-blocking — skip on timeout/error)
       this.loading = true;
