@@ -71,13 +71,16 @@
                   :loading="loading"
                   :is-dark="isDark"
                   :bbox="reprojectedBbox"
-                  :initial-center="urlInit?.center"
-                  :initial-zoom="urlInit?.zoom"
+                  :initial-center="initialMapCenter"
+                  :initial-zoom="initialMapZoom"
                   @select="onMapSelect"
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
                 />
-                <div v-if="hasMore && visibleColumns.length === 0" class="map-load-more d-flex justify-center ga-2 pa-2">
+                <div
+                  v-if="hasMore && visibleColumns.length === 0"
+                  class="map-load-more d-flex justify-center ga-2 pa-2"
+                >
                   <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
                     Load more geometry ({{ pageSize.toLocaleString() }} rows)
                   </v-btn>
@@ -309,6 +312,8 @@ export default {
       queryBbox: null,
       mapZoom: null,
       mapCenter: null,
+      initialMapCenter: null,
+      initialMapZoom: null,
 
       // Viewport
       viewportBounds: null,
@@ -612,10 +617,6 @@ export default {
     const urlState = Utils.parseUrlState();
     this.urlInit = urlState;
 
-    // Non-reactive map position (updated by onViewportChange, read by syncUrl)
-    this.mapCenter = urlState.center || null;
-    this.mapZoom = urlState.zoom ?? null;
-
     if (urlState.url) {
       this.loadFromUrl(urlState.url);
     } else {
@@ -687,6 +688,8 @@ export default {
       this.source = url;
       this.displaySource = url;
       this._skipInitialFit = !!this.urlInit?.center;
+      this.initialMapZoom = this.urlInit?.zoom || null;
+      this.initialMapCenter = this.urlInit?.center || null;
 
       // Phase 1: quick HTTP health check (non-blocking — skip on timeout/error)
       this.loading = true;
