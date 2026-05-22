@@ -331,8 +331,7 @@ export default {
       kvMetadataInitialKey: null,
 
       // App details
-      version: version,
-      urlInit: null
+      version: version
     };
   },
   computed: {
