@@ -196,7 +196,12 @@ import {
   queryCount,
   transformBbox
 } from './db.js';
-import { buildGeoArrowTables, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
+import {
+  buildGeoArrowTables,
+  toBinary,
+  findGeoColumn,
+  resolveCloudUrl
+} from '@walkthru-earth/objex-utils';
 import Utils, { checkFileHealth, DEFAULT_PAGE_SIZE } from './utils.js';
 
 import MapView from './components/MapView.vue';
@@ -667,14 +672,17 @@ export default {
     // ── Data loading ──────────────────────────────────────
     async loadFromUrl(url) {
       this.reset();
-      this.source = url;
-      this.displaySource = url;
+      this.setStatus('Resolving URL...');
+      const resolvedUrl = resolveCloudUrl(url);
+
+      this.source = resolvedUrl;
+      this.displaySource = resolvedUrl;
       this._skipInitialFit = !!this.urlInit?.center;
 
       // Phase 1: quick HTTP health check (non-blocking — skip on timeout/error)
       this.loading = true;
       this.setStatus('Checking file...');
-      const warnings = await checkFileHealth(url);
+      const warnings = await checkFileHealth(resolvedUrl);
       if (warnings.length > 0) {
         this.loading = false;
         this.statusMessage = '';
