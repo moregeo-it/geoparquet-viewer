@@ -17,8 +17,11 @@
           density="compact"
           variant="outlined"
           clearable
-          hide-details
-          @keydown.enter="(newUrl || selectedFile) && submit()"
+          hide-details="auto"
+          :rules="[validateUrl]"
+          hint="Supports public https://, http://, s3://, and gs:// URLs"
+          persistent-hint
+          @keydown.enter="(newUrl || selectedFile) && !urlValidationError && submit()"
         />
 
         <h3 class="text-subtitle-1 font-weight-bold mt-4 mb-2">From local file</h3>
@@ -49,7 +52,11 @@
       <v-card-actions>
         <v-spacer />
         <v-btn @click="$emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" :disabled="!newUrl && !selectedFile" @click="submit"
+        <v-btn
+          color="primary"
+          variant="flat"
+          :disabled="(!newUrl && !selectedFile) || Boolean(urlValidationError)"
+          @click="submit"
           >Load</v-btn
         >
       </v-card-actions>
@@ -106,7 +113,38 @@ export default {
       }
     }
   },
+  computed: {
+    urlValidationError() {
+      if (!this.newUrl) return null;
+      const result = this.validateUrl(this.newUrl);
+      return result === true ? null : result;
+    }
+  },
   methods: {
+    validateUrl(url) {
+      if (!url) return true;
+
+      const unsupportedProtocols = [
+        { prefix: 'abfs://', name: 'Azure Data Lake Storage (abfs://)' },
+        { prefix: 'abfss://', name: 'Azure Data Lake Storage (abfss://)' },
+        { prefix: 'az://', name: 'Azure Blob Storage (az://)' },
+        { prefix: 'wasb://', name: 'Azure Blob Storage (wasb://)' },
+        { prefix: 'wasbs://', name: 'Azure Blob Storage (wasbs://)' },
+        { prefix: 'hdfs://', name: 'HDFS (hdfs://)' }
+      ];
+
+      for (const { prefix, name } of unsupportedProtocols) {
+        if (url.toLowerCase().startsWith(prefix)) {
+          return `${name} is not supported. Please use a public https://, s3://, or gs:// URL instead.`;
+        }
+      }
+
+      if (!/^https?:\/\//i.test(url) && !/^s3:\/\//i.test(url) && !/^gs:\/\//i.test(url)) {
+        return 'URL must start with https://, http://, s3://, or gs://.';
+      }
+
+      return true;
+    },
     selectExample(url) {
       this.newUrl = url;
       this.selectedFile = null;
