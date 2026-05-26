@@ -26,8 +26,8 @@
           style="min-height: 0; position: relative"
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
-          <Splitpanes :horizontal="isMobile" :dbl-click-splitter="false">
-            <Pane :size="primaryGeoColumn ? 50 : 100">
+          <SplitPanes :horizontal="isMobile">
+            <PaneView>
               <div class="left-panel d-flex flex-column">
                 <FilterPanel
                   v-if="visibleColumns.length > 0"
@@ -58,8 +58,8 @@
                   </v-btn>
                 </div>
               </div>
-            </Pane>
-            <Pane v-if="primaryGeoColumn">
+            </PaneView>
+            <PaneView v-if="primaryGeoColumn">
               <div class="right-panel">
                 <MapView
                   ref="mapView"
@@ -78,8 +78,8 @@
                   @reloadViewport="reloadForViewport"
                 />
               </div>
-            </Pane>
-          </Splitpanes>
+            </PaneView>
+          </SplitPanes>
         </div>
 
         <div
@@ -214,14 +214,14 @@ import SchemaModal from './components/modals/SchemaModal.vue';
 import FileWarningModal from './components/modals/FileWarningModal.vue';
 import DbInitErrorModal from './components/modals/DbInitErrorModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
+import SplitPanes from './components/SplitPanes.vue';
+import PaneView from './components/PaneView.vue';
 import KvMetadataModal, {
   FRIENDLY_NAMES as KV_FRIENDLY_NAMES
 } from './components/modals/KvMetadataModal.vue';
 
 import { startConversion } from './converter.js';
 import { shallowRef } from 'vue';
-import { Splitpanes, Pane } from 'splitpanes';
-import 'splitpanes/dist/splitpanes.css';
 
 import { version } from '../package.json';
 
@@ -244,8 +244,8 @@ export default {
     LoadAllModal,
     AppBarMenu,
     DbInitErrorModal,
-    Splitpanes,
-    Pane
+    SplitPanes,
+    PaneView
   },
   data() {
     return {
@@ -1266,24 +1266,6 @@ export default {
 .right-panel {
   overflow: hidden;
   height: 100%;
-}
-
-/* Splitpanes theme overrides */
-.content-panels .splitpanes__splitter {
-  background: rgba(var(--v-border-color), var(--v-border-opacity));
-  position: relative;
-}
-.content-panels .splitpanes--vertical > .splitpanes__splitter {
-  width: 5px;
-  min-width: 5px;
-}
-.content-panels .splitpanes--horizontal > .splitpanes__splitter {
-  height: 5px;
-  min-height: 5px;
-}
-.content-panels .splitpanes__splitter:hover,
-.content-panels .splitpanes__splitter:active {
-  background: rgb(var(--v-theme-primary));
 }
 
 @media (max-width: 768px) {
