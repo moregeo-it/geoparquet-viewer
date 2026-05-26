@@ -600,7 +600,7 @@ const initialPanesSizing = () => {
   }
 };
 
-const equalizeAfterAddOrRemove = ({ addedPane, removedPane } = {}) => {
+const equalizeAfterAddOrRemove = () => {
   // Distribute space only among panes without an explicit givenSize.
   const totalGivenSize = panes.value.reduce(
     (sum, p) => sum + (p.givenSize !== null ? p.givenSize : 0),
@@ -692,7 +692,7 @@ const readjustSizes = (leftToAllocate, ungrowable, unshrinkable) => {
     equalSpaceToAllocate = leftToAllocate / (panesCount.value - ungrowable.length);
   else equalSpaceToAllocate = leftToAllocate / (panesCount.value - unshrinkable.length);
 
-  panes.value.forEach((pane, i) => {
+  panes.value.forEach((pane) => {
     if (leftToAllocate > 0 && !ungrowable.includes(pane.id)) {
       // Need to diff the size before and after to get the exact allocated space.
       const newPaneSize = Math.max(Math.min(pane.size + equalSpaceToAllocate, pane.max), pane.min);
