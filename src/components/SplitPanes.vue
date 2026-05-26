@@ -171,23 +171,18 @@ const onSplitterDblClick = (event, splitterIndex) => {
 
     const totalSize = leftPane.size + rightPane.size;
 
-    // Rule 3: If one pane is hidden (at min), restore to center.
+    // Rule 1: If one pane is hidden (at min), restore to center.
     if (leftPane.size <= leftPane.min || rightPane.size <= rightPane.min) {
       const half = totalSize / 2;
       leftPane.size = Math.max(Math.min(half, leftPane.max), leftPane.min);
       rightPane.size = totalSize - leftPane.size;
     }
-    // Rule 4: If splitter is in the middle (equal sizes), hide left pane.
-    else if (Math.abs(leftPane.size - rightPane.size) < 0.5) {
+    // Rule 2: If left pane is smaller or equal to the right pane, hide left pane.
+    else if (leftPane.size <= rightPane.size) {
       leftPane.size = leftPane.min;
       rightPane.size = totalSize - leftPane.min;
     }
-    // Rule 1: If left pane is smaller, hide left pane.
-    else if (leftPane.size < rightPane.size) {
-      leftPane.size = leftPane.min;
-      rightPane.size = totalSize - leftPane.min;
-    }
-    // Rule 2: If right pane is smaller, hide right pane.
+    // Rule 3: If right pane is smaller, hide right pane.
     else {
       rightPane.size = rightPane.min;
       leftPane.size = totalSize - rightPane.min;
@@ -869,6 +864,7 @@ provide('onPaneClick', onPaneClick);
   // Disable default zoom behavior on touch device when double tapping splitter.
   &__splitter {
     touch-action: none;
+    user-select: none;
     background: rgba(var(--v-border-color), var(--v-border-opacity));
     position: relative;
 
