@@ -48,8 +48,8 @@ export default {
     loading: { type: Boolean, default: false },
     isDark: { type: Boolean, default: false },
     bbox: { type: Array, default: null },
-    initialCenter: { type: Array, default: null },
-    initialZoom: { type: Number, default: null }
+    mapCenter: { type: Array, default: null },
+    mapZoom: { type: Number, default: null }
   },
   emits: ['select', 'viewportChange', 'reloadViewport'],
   data() {
@@ -141,8 +141,8 @@ export default {
             }
           ]
         },
-        center: this.initialCenter || [0, 20],
-        zoom: this.initialZoom ?? 2,
+        center: this.mapCenter || [0, 20],
+        zoom: this.mapZoom ?? 2,
         attributionControl: true
       });
 

@@ -71,8 +71,8 @@
                   :loading="loading"
                   :is-dark="isDark"
                   :bbox="reprojectedBbox"
-                  :initial-center="urlInit?.center"
-                  :initial-zoom="urlInit?.zoom"
+                  :map-center="mapCenter"
+                  :map-zoom="mapZoom"
                   @select="onMapSelect"
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
@@ -603,10 +603,6 @@ export default {
     const urlState = Utils.parseUrlState();
     this.urlInit = urlState;
 
-    // Non-reactive map position (updated by onViewportChange, read by syncUrl)
-    this.mapCenter = urlState.center || null;
-    this.mapZoom = urlState.zoom ?? null;
-
     if (urlState.url) {
       this.loadFromUrl(urlState.url);
     } else {
@@ -680,6 +676,8 @@ export default {
 
       this.source = resolvedUrl;
       this.displaySource = resolvedUrl;
+      this.mapZoom = this.urlInit?.zoom || null;
+      this.mapCenter = this.urlInit?.center || null;
       this._skipInitialFit = !!this.urlInit?.center;
 
       // Phase 1: quick HTTP health check (non-blocking — skip on timeout/error)
