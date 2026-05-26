@@ -26,8 +26,8 @@
           style="min-height: 0; position: relative"
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
-          <Splitpanes :horizontal="isMobile" :dbl-click-splitter="false">
-            <Pane v-if="visibleColumns.length > 0" :size="primaryGeoColumn ? 50 : 100">
+          <SplitPanes :horizontal="isMobile">
+            <PaneView v-if="visibleColumns.length > 0">
               <div class="left-panel d-flex flex-column">
                 <FilterPanel
                   v-if="visibleColumns.length > 0"
@@ -58,8 +58,8 @@
                   </v-btn>
                 </div>
               </div>
-            </Pane>
-            <Pane v-if="primaryGeoColumn" :size="visibleColumns.length > 0 ? 50 : 100">
+            </PaneView>
+            <PaneView v-if="primaryGeoColumn">
               <div class="right-panel">
                 <MapView
                   ref="mapView"
@@ -71,8 +71,8 @@
                   :loading="loading"
                   :is-dark="isDark"
                   :bbox="reprojectedBbox"
-                  :initial-center="initialMapCenter"
-                  :initial-zoom="initialMapZoom"
+                  :map-center="mapCenter"
+                  :map-zoom="mapZoom"
                   @select="onMapSelect"
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
@@ -95,8 +95,8 @@
                   </v-btn>
                 </div>
               </div>
-            </Pane>
-          </Splitpanes>
+            </PaneView>
+          </SplitPanes>
         </div>
 
         <div
@@ -212,7 +212,12 @@ import {
   queryCount,
   transformBbox
 } from './db.js';
-import { buildGeoArrowTables, toBinary, findGeoColumn } from '@walkthru-earth/objex-utils';
+import {
+  buildGeoArrowTables,
+  toBinary,
+  findGeoColumn,
+  resolveCloudUrl
+} from '@walkthru-earth/objex-utils';
 import Utils, { checkFileHealth, DEFAULT_PAGE_SIZE } from './utils.js';
 
 import MapView from './components/MapView.vue';
@@ -231,14 +236,14 @@ import SchemaModal from './components/modals/SchemaModal.vue';
 import FileWarningModal from './components/modals/FileWarningModal.vue';
 import DbInitErrorModal from './components/modals/DbInitErrorModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
+import SplitPanes from './components/SplitPanes.vue';
+import PaneView from './components/PaneView.vue';
 import KvMetadataModal, {
   FRIENDLY_NAMES as KV_FRIENDLY_NAMES
 } from './components/modals/KvMetadataModal.vue';
 
 import { startConversion } from './converter.js';
 import { shallowRef } from 'vue';
-import { Splitpanes, Pane } from 'splitpanes';
-import 'splitpanes/dist/splitpanes.css';
 
 import { version } from '../package.json';
 
@@ -261,8 +266,8 @@ export default {
     LoadAllModal,
     AppBarMenu,
     DbInitErrorModal,
-    Splitpanes,
-    Pane
+    SplitPanes,
+    PaneView
   },
   data() {
     return {
@@ -685,8 +690,13 @@ export default {
     // ── Data loading ──────────────────────────────────────
     async loadFromUrl(url) {
       this.reset();
-      this.source = url;
-      this.displaySource = url;
+      this.setStatus('Resolving URL...');
+      const resolvedUrl = resolveCloudUrl(url);
+
+      this.source = resolvedUrl;
+      this.displaySource = resolvedUrl;
+      this.mapZoom = this.urlInit?.zoom || null;
+      this.mapCenter = this.urlInit?.center || null;
       this._skipInitialFit = !!this.urlInit?.center;
       this.initialMapZoom = this.urlInit?.zoom || null;
       this.initialMapCenter = this.urlInit?.center || null;
@@ -694,7 +704,7 @@ export default {
       // Phase 1: quick HTTP health check (non-blocking — skip on timeout/error)
       this.loading = true;
       this.setStatus('Checking file...');
-      const warnings = await checkFileHealth(url);
+      const warnings = await checkFileHealth(resolvedUrl);
       if (warnings.length > 0) {
         this.loading = false;
         this.statusMessage = '';

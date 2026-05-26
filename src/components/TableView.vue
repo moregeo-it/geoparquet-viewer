@@ -276,7 +276,6 @@ export default {
 }
 .table-wrapper :deep(.selected-row .cell) {
   height: auto;
-  max-height: 25vh;
 }
 .table-wrapper :deep(.cell-content) {
   white-space: nowrap;
@@ -291,8 +290,8 @@ export default {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 20px;
+  max-height: 25vh;
   overflow: auto;
-  text-overflow: none;
 }
 .table-wrapper :deep(.selected-row.light) {
   background-color: rgba(255, 152, 0, 0.18) !important;
