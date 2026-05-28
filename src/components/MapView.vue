@@ -151,37 +151,6 @@ export default {
       this.overlay = new MapboxOverlay({ layers: [], interleaved: false });
       this.map.addControl(this.overlay);
 
-      // Canvas-level click for multi-pick disambiguation
-      this.map.getCanvas().addEventListener('click', (event) => {
-        if (!this.overlay?._deck) return;
-        const rect = this.map.getCanvas().getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const hits = this.overlay._deck.pickMultipleObjects({ x, y, depth: 10 });
-        if (!hits || hits.length === 0) return;
-
-        // Deduplicate by __index
-        const seen = new Set();
-        const indices = [];
-        for (const hit of hits) {
-          const idx = this.rowIndex(hit.object);
-          if (idx !== null && !seen.has(idx)) {
-            seen.add(idx);
-            indices.push(idx);
-          }
-        }
-        if (indices.length === 0) return;
-
-        if (indices.length === 1) {
-          // Single hit: toggle selection (same as before)
-          const idx = indices[0];
-          this.$emit('select', idx === this.selectedIndex ? null : idx);
-        } else {
-          // Multiple hits: emit candidates with pixel position
-          this.$emit('selectCandidates', { indices, position: { x: event.clientX, y: event.clientY } });
-        }
-      });
-
       this.map.on('load', () => {
         this.ready = true;
         this.updateBasemap();
@@ -221,6 +190,35 @@ export default {
         const SELECTED_FILL = this.isDark ? SELECTED_FILL_DARK : SELECTED_FILL_LIGHT;
         const SELECTED_LINE = this.isDark ? SELECTED_LINE_DARK : SELECTED_LINE_LIGHT;
 
+        const handleClick = (info, event) => {
+          if (!info.picked || !this.overlay?._deck) return;
+          const hits = this.overlay._deck.pickMultipleObjects({ x: info.x, y: info.y, depth: 10 });
+
+          const seen = new Set();
+          const indices = [];
+          for (const hit of hits) {
+            const idx = this.rowIndex(hit.object);
+            if (idx !== null && !seen.has(idx)) {
+              seen.add(idx);
+              indices.push(idx);
+            }
+          }
+          if (indices.length === 0) return;
+
+          if (indices.length === 1) {
+            const idx = indices[0];
+            this.$emit('select', idx === selectedIndex ? null : idx);
+          } else {
+            const canvas = this.map.getCanvas();
+            const rect = canvas.getBoundingClientRect();
+            this.$emit('selectCandidates', {
+              indices,
+              position: { x: rect.left + info.x, y: rect.top + info.y }
+            });
+          }
+          return true;
+        };
+
         for (let i = 0; i < this.geoArrowResults.length; i++) {
           const result = this.geoArrowResults[i];
           const layerId = `geoarrow-${result.geometryType}-${i}`;
@@ -254,6 +252,7 @@ export default {
                     this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
                   }
                 },
+                onClick: handleClick,
                 updateTriggers: {
                   getFillColor: [selectedIndex, this.isDark]
                 }
@@ -280,6 +279,7 @@ export default {
                     this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
                   }
                 },
+                onClick: handleClick,
                 updateTriggers: {
                   getColor: [selectedIndex, this.isDark]
                 }
@@ -305,6 +305,7 @@ export default {
                     this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
                   }
                 },
+                onClick: handleClick,
                 updateTriggers: {
                   getFillColor: [selectedIndex, this.isDark],
                   getLineColor: [selectedIndex, this.isDark]

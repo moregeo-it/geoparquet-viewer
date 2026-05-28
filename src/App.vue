@@ -78,19 +78,18 @@
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
                 />
-                <!-- Feature disambiguation picker -->
+                <!-- Feature overlap picker -->
                 <v-menu
                   v-model="showOverlap"
-                  :style="overlapStyle"
                   location="bottom start"
                   :close-on-content-click="true"
                   @update:model-value="val => { if (!val) dismissOverlap(); }"
                 >
                   <template #activator="{ props: menuProps }">
-                    <span v-bind="menuProps" class="disambiguation-anchor" />
+                    <span v-bind="menuProps" class="overlap-anchor" :style="overlapAnchorStyle" />
                   </template>
-                  <v-list density="compact" class="disambiguation-list">
-                    <v-list-subheader>{{ pickOverlaps.length }} features at this point</v-list-subheader>
+                  <v-list density="compact" class="overlap-list">
+                    <v-list-subheader>{{ overlapFeatures.length }} features at this point</v-list-subheader>
                     <v-list-item
                       v-for="item in overlapItems"
                       :key="item.index"
@@ -493,24 +492,30 @@ export default {
       return this.$vuetify.theme.current.dark;
     },
 
-    // ── Disambiguation picker ──────────────────────────────
+    // ── Overlap picker ──────────────────────────────
     showOverlap: {
       get() { return this.overlapFeatures.length > 0; },
       set() { /* controlled via dismissOverlap */ }
     },
-    overlapStyle() {
-      if (!this.overlapPosition) return '';
-      return `position:fixed; left:${this.overlapPosition.x}px; top:${this.overlapPosition.y}px;`;
+    overlapAnchorStyle() {
+      if (!this.overlapPosition) return 'top:0;left:0;';
+      const panel = this.$refs.mapView?.$el;
+      if (!panel) return 'top:0;left:0;';
+      const rect = panel.getBoundingClientRect();
+      const x = this.overlapPosition.x - rect.left;
+      const y = this.overlapPosition.y - rect.top;
+      return `top:${y}px;left:${x}px;`;
     },
     overlapItems() {
       const cols = this.visibleColumns;
       const startOffset = this.currentOffset - this.rows.length;
       return this.overlapFeatures.map((idx) => {
         const row = this.rows[idx - startOffset];
-        let label = `Feature #${idx}`;
+        const rowNum = idx + 1;
+        let label = `Feature #${rowNum}`;
         if (row && cols.length > 0) {
           const val = row[cols[0].name];
-          if (val != null && val !== '') label = `#${idx}: ${val}`;
+          if (val != null && val !== '') label = `#${rowNum}: ${val}`;
         }
         return { index: idx, label };
       });
@@ -1341,14 +1346,14 @@ export default {
   position: relative;
 }
 
-.disambiguation-anchor {
+.overlap-anchor {
   position: absolute;
   width: 0;
   height: 0;
   pointer-events: none;
 }
 
-.disambiguation-list {
+.overlap-list {
   max-height: 300px;
   overflow-y: auto;
 }
