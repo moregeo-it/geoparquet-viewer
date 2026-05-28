@@ -74,7 +74,7 @@
                   :map-center="mapCenter"
                   :map-zoom="mapZoom"
                   @select="onMapSelect"
-                  @selectCandidates="onOverlapMapSelect"
+                  @selectMultiple="onOverlapMapSelect"
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
                 />

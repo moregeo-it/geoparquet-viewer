@@ -51,7 +51,7 @@ export default {
     mapCenter: { type: Array, default: null },
     mapZoom: { type: Number, default: null }
   },
-  emits: ['select', 'selectCandidates', 'viewportChange', 'reloadViewport'],
+  emits: ['select', 'selectMultiple', 'viewportChange', 'reloadViewport'],
   data() {
     return {
       map: null,
@@ -211,7 +211,7 @@ export default {
           } else {
             const canvas = this.map.getCanvas();
             const rect = canvas.getBoundingClientRect();
-            this.$emit('selectCandidates', {
+            this.$emit('selectMultiple', {
               indices,
               position: { x: rect.left + info.x, y: rect.top + info.y }
             });
