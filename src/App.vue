@@ -74,9 +74,32 @@
                   :map-center="mapCenter"
                   :map-zoom="mapZoom"
                   @select="onMapSelect"
+                  @selectCandidates="onOverlapMapSelect"
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
                 />
+                <!-- Feature disambiguation picker -->
+                <v-menu
+                  v-model="showOverlap"
+                  :style="overlapStyle"
+                  location="bottom start"
+                  :close-on-content-click="true"
+                  @update:model-value="val => { if (!val) dismissOverlap(); }"
+                >
+                  <template #activator="{ props: menuProps }">
+                    <span v-bind="menuProps" class="disambiguation-anchor" />
+                  </template>
+                  <v-list density="compact" class="disambiguation-list">
+                    <v-list-subheader>{{ pickOverlaps.length }} features at this point</v-list-subheader>
+                    <v-list-item
+                      v-for="item in overlapItems"
+                      :key="item.index"
+                      @click="onOverlapItemSelect(item.index)"
+                    >
+                      <v-list-item-title>{{ item.label }}</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-menu>
               </div>
             </PaneView>
           </SplitPanes>
@@ -282,6 +305,8 @@ export default {
 
       // Selection
       selectedIndex: null,
+      overlapFeatures: [],
+      overlapPosition: null,
 
       // Filters
       filters: [],
@@ -466,6 +491,29 @@ export default {
     /** Whether Vuetify is currently using the dark theme */
     isDark() {
       return this.$vuetify.theme.current.dark;
+    },
+
+    // ── Disambiguation picker ──────────────────────────────
+    showOverlap: {
+      get() { return this.overlapFeatures.length > 0; },
+      set() { /* controlled via dismissOverlap */ }
+    },
+    overlapStyle() {
+      if (!this.overlapPosition) return '';
+      return `position:fixed; left:${this.overlapPosition.x}px; top:${this.overlapPosition.y}px;`;
+    },
+    overlapItems() {
+      const cols = this.visibleColumns;
+      const startOffset = this.currentOffset - this.rows.length;
+      return this.overlapFeatures.map((idx) => {
+        const row = this.rows[idx - startOffset];
+        let label = `Feature #${idx}`;
+        if (row && cols.length > 0) {
+          const val = row[cols[0].name];
+          if (val != null && val !== '') label = `#${idx}: ${val}`;
+        }
+        return { index: idx, label };
+      });
     },
 
     isMobile() {
@@ -1050,6 +1098,24 @@ export default {
 
     onMapSelect(index) {
       this.selectedIndex = index;
+      this.overlapFeatures = [];
+      this.overlapPosition = null;
+    },
+
+    onOverlapMapSelect({ indices, position }) {
+      this.overlapFeatures = indices;
+      this.overlapPosition = position;
+    },
+
+    onOverlapItemSelect(index) {
+      this.selectedIndex = index;
+      this.overlapFeatures = [];
+      this.overlapPosition = null;
+    },
+
+    dismissOverlap() {
+      this.overlapFeatures = [];
+      this.overlapPosition = null;
     },
 
     // ── Viewport-driven spatial filtering ──────────────────
@@ -1272,6 +1338,19 @@ export default {
 .right-panel {
   overflow: hidden;
   height: 100%;
+  position: relative;
+}
+
+.disambiguation-anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.disambiguation-list {
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 @media (max-width: 768px) {
