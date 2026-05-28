@@ -817,8 +817,9 @@ export default {
         const init = this.urlInit;
         if (init?.columns) {
           const pageSize = init.pageSize;
+          const tableColumns = init.columns.filter((c) => c !== this.primaryGeoColumn);
           if (init.bbox && this.hasBboxCovering) {
-            this.selectedColumns = init.columns;
+            this.selectedColumns = tableColumns;
             this.pageSize = pageSize;
             this.viewportBounds = init.bbox;
             this.viewportActive = true;
@@ -826,7 +827,7 @@ export default {
             this.reloadForViewport();
           } else {
             this.applyQuerySettings({
-              selectedColumns: init.columns,
+              selectedColumns: tableColumns,
               pageSize
             });
           }
@@ -887,7 +888,8 @@ export default {
         pageSize: this.pageSize,
         center: this.mapCenter,
         zoom: this.mapZoom,
-        bbox: this.queryBbox
+        bbox: this.queryBbox,
+        geoColumn: this.primaryGeoColumn
       });
     },
 

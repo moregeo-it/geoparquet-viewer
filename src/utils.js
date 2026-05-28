@@ -90,14 +90,17 @@ export default class Utils {
    * Write shareable state to URL (replaceState — no navigation, no history entry).
    * Only non-default values are written.
    */
-  static syncUrlParams({ url, columns, pageSize, center, zoom, bbox }) {
+  static syncUrlParams({ url, columns, pageSize, center, zoom, bbox, geoColumn }) {
     if (!url) {
       history.replaceState({}, '', window.location.pathname);
       return;
     }
     const p = new URLSearchParams();
     p.set('url', url);
-    if (columns && columns.length > 0) columns.forEach((col) => p.append('c', col));
+    if (Array.isArray(columns)) {
+      if (geoColumn) p.append('c', geoColumn);
+      columns.forEach((col) => p.append('c', col));
+    }
     if (pageSize && pageSize !== null) p.set('pageSize', String(pageSize));
     if (center && zoom != null) {
       p.set('map', `${zoom.toFixed(2)}~${center[0].toFixed(5)}~${center[1].toFixed(5)}`);
