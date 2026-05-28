@@ -83,13 +83,19 @@
                   v-model="showOverlap"
                   location="bottom start"
                   :close-on-content-click="true"
-                  @update:model-value="val => { if (!val) dismissOverlap(); }"
+                  @update:model-value="
+                    (val) => {
+                      if (!val) dismissOverlap();
+                    }
+                  "
                 >
                   <template #activator="{ props: menuProps }">
                     <span v-bind="menuProps" class="overlap-anchor" :style="overlapAnchorStyle" />
                   </template>
                   <v-list density="compact" class="overlap-list">
-                    <v-list-subheader>{{ overlapFeatures.length }} features at this point</v-list-subheader>
+                    <v-list-subheader
+                      >{{ overlapFeatures.length }} features at this point</v-list-subheader
+                    >
                     <v-list-item
                       v-for="item in overlapItems"
                       :key="item.index"
@@ -494,8 +500,12 @@ export default {
 
     // ── Overlap picker ──────────────────────────────
     showOverlap: {
-      get() { return this.overlapFeatures.length > 0; },
-      set() { /* controlled via dismissOverlap */ }
+      get() {
+        return this.overlapFeatures.length > 0;
+      },
+      set() {
+        /* controlled via dismissOverlap */
+      }
     },
     overlapAnchorStyle() {
       if (!this.overlapPosition) return 'top:0;left:0;';

@@ -190,7 +190,7 @@ export default {
         const SELECTED_FILL = this.isDark ? SELECTED_FILL_DARK : SELECTED_FILL_LIGHT;
         const SELECTED_LINE = this.isDark ? SELECTED_LINE_DARK : SELECTED_LINE_LIGHT;
 
-        const handleClick = (info, event) => {
+        const handleClick = (info) => {
           if (!info.picked || !this.overlay?._deck) return;
           const hits = this.overlay._deck.pickMultipleObjects({ x: info.x, y: info.y, depth: 10 });
 
