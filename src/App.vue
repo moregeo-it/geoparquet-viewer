@@ -317,8 +317,6 @@ export default {
       queryBbox: null,
       mapZoom: null,
       mapCenter: null,
-      initialMapCenter: null,
-      initialMapZoom: null,
 
       // Viewport
       viewportBounds: null,
@@ -698,8 +696,6 @@ export default {
       this.mapZoom = this.urlInit?.zoom || null;
       this.mapCenter = this.urlInit?.center || null;
       this._skipInitialFit = !!this.urlInit?.center;
-      this.initialMapZoom = this.urlInit?.zoom || null;
-      this.initialMapCenter = this.urlInit?.center || null;
 
       // Phase 1: quick HTTP health check (non-blocking — skip on timeout/error)
       this.loading = true;
