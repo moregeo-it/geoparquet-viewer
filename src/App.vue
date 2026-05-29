@@ -59,7 +59,7 @@
                 </div>
               </div>
             </PaneView>
-            <PaneView v-if="primaryGeoColumn">
+            <PaneView v-if="primaryGeoColumn && loadGeometry">
               <div class="right-panel">
                 <MapView
                   ref="mapView"
@@ -373,6 +373,11 @@ export default {
     },
     versionColor() {
       return this.isStable ? 'info' : 'warning';
+    },
+    loadGeometry() {
+      if (!this.primaryGeoColumn) return false;
+      if (!this.selectedColumns) return true;
+      return this.selectedColumns.includes(this.primaryGeoColumn);
     },
     /** The primary geometry column name from GeoParquet metadata or schema detection */
     primaryGeoColumn() {
@@ -817,9 +822,8 @@ export default {
         const init = this.urlInit;
         if (init?.columns) {
           const pageSize = init.pageSize;
-          const tableColumns = init.columns.filter((c) => c !== this.primaryGeoColumn);
           if (init.bbox && this.hasBboxCovering) {
-            this.selectedColumns = tableColumns;
+            this.selectedColumns = init.columns;
             this.pageSize = pageSize;
             this.viewportBounds = init.bbox;
             this.viewportActive = true;
@@ -827,7 +831,7 @@ export default {
             this.reloadForViewport();
           } else {
             this.applyQuerySettings({
-              selectedColumns: tableColumns,
+              selectedColumns: init.columns,
               pageSize
             });
           }
@@ -889,7 +893,6 @@ export default {
         center: this.mapCenter,
         zoom: this.mapZoom,
         bbox: this.queryBbox,
-        geoColumn: this.primaryGeoColumn
       });
     },
 
@@ -962,7 +965,7 @@ export default {
       // Build explicit column list: visible columns + geo column.
       // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
       const tableColNames = this.visibleColumns.map((c) => c.name);
-      const geoCol = this.primaryGeoColumn;
+      const geoCol = this.loadGeometry ? this.primaryGeoColumn : null;
       const selectColumns = geoCol ? [...tableColNames, geoCol] : tableColNames;
 
       const result = await queryData(this.source, {
