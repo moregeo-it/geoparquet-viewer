@@ -962,7 +962,7 @@ export default {
         pageSize: this.pageSize,
         center: this.mapCenter,
         zoom: this.mapZoom,
-        bbox: this.queryBbox,
+        bbox: this.queryBbox
       });
     },
 

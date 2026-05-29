@@ -147,7 +147,9 @@ export default {
     /** Non-geo, non-internal columns available for selection */
     availableColumns() {
       const geoSet = new Set(this.geoColumns);
-      const nonGeoColumns = this.schema.filter((col) => !geoSet.has(col.name) && !col.name.startsWith('__'));
+      const nonGeoColumns = this.schema.filter(
+        (col) => !geoSet.has(col.name) && !col.name.startsWith('__')
+      );
 
       if (this.primaryGeoColumn) {
         const primaryGeoColInfo = this.schema.find((col) => col.name === this.primaryGeoColumn);
@@ -234,7 +236,11 @@ export default {
       }
 
       // Geometry Column size warning
-      if (this.columnSizes && this.primaryGeoColumn && this.localSelectedColumns.includes(this.primaryGeoColumn)) {
+      if (
+        this.columnSizes &&
+        this.primaryGeoColumn &&
+        this.localSelectedColumns.includes(this.primaryGeoColumn)
+      ) {
         const geoColSize = this.rowGroupsLoading * this.selectedGeoColumnsSize;
         if (geoColSize > MAX_REC_CHUNK_SIZE) {
           warnings.push({
@@ -287,7 +293,11 @@ export default {
       return total;
     },
     selectedGeoColumnsSize() {
-      if (this.columnSizes && this.primaryGeoColumn && this.localSelectedColumns.includes(this.primaryGeoColumn)) {
+      if (
+        this.columnSizes &&
+        this.primaryGeoColumn &&
+        this.localSelectedColumns.includes(this.primaryGeoColumn)
+      ) {
         return this.columnSizes[this.primaryGeoColumn] || 0;
       }
       return 0;
