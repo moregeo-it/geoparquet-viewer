@@ -48,7 +48,7 @@
         <p class="text-caption text-grey-darken-1 my-1">
           Select which columns to load and display. This is important as GeoParquet is a columnar
           format and only loading the columns you need will improve load time and memory usage. The
-          primary geometry column is always loaded.
+          primary geometry column controls whether the map is shown.
         </p>
         <div
           class="column-picker-list"
@@ -109,14 +109,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="cancel">Cancel</v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          :disabled="localSelectedColumns.length === 0 && !primaryGeoColumn"
-          @click="submit"
-        >
-          Load
-        </v-btn>
+        <v-btn color="primary" variant="flat" @click="submit"> Load </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -147,7 +140,18 @@ export default {
     /** Non-geo, non-internal columns available for selection */
     availableColumns() {
       const geoSet = new Set(this.geoColumns);
-      return this.schema.filter((col) => !geoSet.has(col.name) && !col.name.startsWith('__'));
+      const nonGeoColumns = this.schema.filter(
+        (col) => !geoSet.has(col.name) && !col.name.startsWith('__')
+      );
+
+      if (this.primaryGeoColumn) {
+        const primaryGeoColInfo = this.schema.find((col) => col.name === this.primaryGeoColumn);
+        if (primaryGeoColInfo) {
+          return [primaryGeoColInfo, ...nonGeoColumns];
+        }
+        return nonGeoColumns;
+      }
+      return nonGeoColumns;
     },
     /** Geometry type label from GeoParquet metadata */
     geometryType() {
@@ -225,7 +229,11 @@ export default {
       }
 
       // Geometry Column size warning
-      if (this.columnSizes && this.primaryGeoColumn) {
+      if (
+        this.columnSizes &&
+        this.primaryGeoColumn &&
+        this.localSelectedColumns.includes(this.primaryGeoColumn)
+      ) {
         const geoColSize = this.rowGroupsLoading * this.selectedGeoColumnsSize;
         if (geoColSize > MAX_REC_CHUNK_SIZE) {
           warnings.push({
@@ -278,7 +286,11 @@ export default {
       return total;
     },
     selectedGeoColumnsSize() {
-      if (this.columnSizes && this.primaryGeoColumn) {
+      if (
+        this.columnSizes &&
+        this.primaryGeoColumn &&
+        this.localSelectedColumns.includes(this.primaryGeoColumn)
+      ) {
         return this.columnSizes[this.primaryGeoColumn] || 0;
       }
       return 0;
@@ -307,7 +319,7 @@ export default {
       if (d.selectedColumns) {
         this.localSelectedColumns = d.selectedColumns.filter((n) => allNames.includes(n));
       } else {
-        this.localSelectedColumns = [];
+        this.localSelectedColumns = this.primaryGeoColumn ? [this.primaryGeoColumn] : [];
       }
 
       const match = this.pageSizeOptions.find((o) => o.value === this.defaultPageSize);

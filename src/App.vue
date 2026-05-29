@@ -27,7 +27,7 @@
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
           <SplitPanes :horizontal="isMobile">
-            <PaneView v-if="visibleColumns.length > 0">
+            <PaneView v-if="showTablePane">
               <div class="left-panel d-flex flex-column">
                 <FilterPanel
                   v-if="visibleColumns.length > 0"
@@ -43,7 +43,10 @@
                   :is-dark="isDark"
                   @select="onTableSelect"
                 />
-                <div v-if="hasMore" class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2">
+                <div
+                  v-if="hasMore && visibleColumns.length > 0"
+                  class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2"
+                >
                   <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
                     Load more ({{ pageSize.toLocaleString() }} rows)
                   </v-btn>
@@ -59,7 +62,7 @@
                 </div>
               </div>
             </PaneView>
-            <PaneView v-if="primaryGeoColumn">
+            <PaneView v-if="primaryGeoColumn && loadGeometry">
               <div class="right-panel">
                 <MapView
                   ref="mapView"
@@ -121,7 +124,7 @@
                   </v-card>
                 </v-menu>
                 <div
-                  v-if="hasMore && visibleColumns.length === 0"
+                  v-if="hasMore && !showTablePane"
                   class="map-load-more d-flex justify-center ga-2 pa-2"
                 >
                   <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
@@ -419,6 +422,19 @@ export default {
     },
     versionColor() {
       return this.isStable ? 'info' : 'warning';
+    },
+    loadGeometry() {
+      if (!this.primaryGeoColumn) return false;
+      if (!this.selectedColumns) return true;
+      return this.selectedColumns.includes(this.primaryGeoColumn);
+    },
+    showTablePane() {
+      const hasNonGeo = this.visibleColumns.length > 0;
+      const metadataOnly =
+        Array.isArray(this.selectedColumns) &&
+        this.selectedColumns.length === 0 &&
+        !this.loadGeometry;
+      return hasNonGeo || metadataOnly;
     },
     /** The primary geometry column name from GeoParquet metadata or schema detection */
     primaryGeoColumn() {
@@ -885,11 +901,10 @@ export default {
         this.statusMessage = '';
         this.loading = false;
         const init = this.urlInit;
-        if (init?.columns) {
+        if (init?.columns !== null) {
           const pageSize = init.pageSize;
-          const tableColumns = init.columns.filter((c) => c !== this.primaryGeoColumn);
           if (init.bbox && this.hasBboxCovering) {
-            this.selectedColumns = tableColumns;
+            this.selectedColumns = init.columns;
             this.pageSize = pageSize;
             this.viewportBounds = init.bbox;
             this.viewportActive = true;
@@ -897,7 +912,7 @@ export default {
             this.reloadForViewport();
           } else {
             this.applyQuerySettings({
-              selectedColumns: tableColumns,
+              selectedColumns: init.columns,
               pageSize
             });
           }
@@ -958,8 +973,7 @@ export default {
         pageSize: this.pageSize,
         center: this.mapCenter,
         zoom: this.mapZoom,
-        bbox: this.queryBbox,
-        geoColumn: this.primaryGeoColumn
+        bbox: this.queryBbox
       });
     },
 
@@ -1032,8 +1046,17 @@ export default {
       // Build explicit column list: visible columns + geo column.
       // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
       const tableColNames = this.visibleColumns.map((c) => c.name);
-      const geoCol = this.primaryGeoColumn;
+      const geoCol = this.loadGeometry ? this.primaryGeoColumn : null;
       const selectColumns = geoCol ? [...tableColNames, geoCol] : tableColNames;
+
+      if (tableColNames.length === 0 && !geoCol) {
+        this.rows = [];
+        this.wkbByIndex = {};
+        this.currentOffset = 0;
+        this.geoArrowResults = [];
+
+        return;
+      }
 
       const result = await queryData(this.source, {
         geoColumn: geoCol,
