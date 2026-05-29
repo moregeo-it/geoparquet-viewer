@@ -190,9 +190,10 @@ export default {
         const SELECTED_FILL = this.isDark ? SELECTED_FILL_DARK : SELECTED_FILL_LIGHT;
         const SELECTED_LINE = this.isDark ? SELECTED_LINE_DARK : SELECTED_LINE_LIGHT;
 
+        const PICK_DEPTH = 100;
         const handleClick = (info) => {
           if (!info.picked || !this.overlay?._deck) return;
-          const hits = this.overlay._deck.pickMultipleObjects({ x: info.x, y: info.y, depth: 10 });
+          const hits = this.overlay._deck.pickMultipleObjects({ x: info.x, y: info.y, depth: PICK_DEPTH });
 
           const seen = new Set();
           const indices = [];
@@ -213,7 +214,8 @@ export default {
             const rect = canvas.getBoundingClientRect();
             this.$emit('selectMultiple', {
               indices,
-              position: { x: rect.left + info.x, y: rect.top + info.y }
+              position: { x: rect.left + info.x, y: rect.top + info.y },
+              depthReached: hits.length >= PICK_DEPTH
             });
           }
           return true;

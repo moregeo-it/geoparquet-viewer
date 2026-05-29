@@ -82,7 +82,7 @@
                 <v-menu
                   v-model="showOverlap"
                   location="bottom start"
-                  :close-on-content-click="true"
+                  :close-on-content-click="false"
                   @update:model-value="
                     (val) => {
                       if (!val) dismissOverlap();
@@ -99,9 +99,19 @@
                     <v-list-item
                       v-for="item in overlapItems"
                       :key="item.index"
-                      @click="onOverlapItemSelect(item.index)"
+                      :active="selectedIndex === item.index"
+                      @click="onMapSelect(item.index)"
                     >
                       <v-list-item-title>{{ item.label }}</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item v-if="overlapDepthReached" disabled>
+                      <v-list-item-title class="text-caption text-medium-emphasis">
+                        There could be more geometries
+                      </v-list-item-title>
+                    </v-list-item>
+                    <v-divider class="my-1" />
+                    <v-list-item @click="dismissOverlap">
+                      <v-list-item-title class="text-center">Close</v-list-item-title>
                     </v-list-item>
                   </v-list>
                 </v-menu>
@@ -329,6 +339,7 @@ export default {
       selectedIndex: null,
       overlapFeatures: [],
       overlapPosition: null,
+      overlapDepthReached: false,
 
       // Filters
       filters: [],
@@ -534,17 +545,8 @@ export default {
       return `top:${y}px;left:${x}px;`;
     },
     overlapItems() {
-      const cols = this.visibleColumns;
-      const startOffset = this.currentOffset - this.rows.length;
       return this.overlapFeatures.map((idx) => {
-        const row = this.rows[idx - startOffset];
-        const rowNum = idx + 1;
-        let label = `Feature #${rowNum}`;
-        if (row && cols.length > 0) {
-          const val = row[cols[0].name];
-          if (val != null && val !== '') label = `#${rowNum}: ${val}`;
-        }
-        return { index: idx, label };
+        return { index: idx, label: `Feature ${idx + 1}` };
       });
     },
 
@@ -1132,24 +1134,18 @@ export default {
 
     onMapSelect(index) {
       this.selectedIndex = index;
-      this.overlapFeatures = [];
-      this.overlapPosition = null;
     },
 
-    onOverlapMapSelect({ indices, position }) {
+    onOverlapMapSelect({ indices, position, depthReached }) {
       this.overlapFeatures = indices;
       this.overlapPosition = position;
-    },
-
-    onOverlapItemSelect(index) {
-      this.selectedIndex = index;
-      this.overlapFeatures = [];
-      this.overlapPosition = null;
+      this.overlapDepthReached = !!depthReached;
     },
 
     dismissOverlap() {
       this.overlapFeatures = [];
       this.overlapPosition = null;
+      this.overlapDepthReached = false;
     },
 
     // ── Viewport-driven spatial filtering ──────────────────
