@@ -83,6 +83,7 @@
                   v-model="showOverlap"
                   location="bottom start"
                   :close-on-content-click="false"
+                  :transition="false"
                   @update:model-value="
                     (val) => {
                       if (!val) dismissOverlap();
