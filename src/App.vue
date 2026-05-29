@@ -96,8 +96,8 @@
                   <v-card>
                     <v-card-title>
                       <strong
-                        >{{ overlapFeatures.length
-                        }}<template v-if="overlapDepthReached">+</template> features found</strong
+                        >Features ({{ overlapFeatures.length
+                        }}<template v-if="overlapDepthReached">+</template>)</strong
                       >
                     </v-card-title>
                     <v-card-subtitle v-if="overlapDepthReached"
@@ -551,7 +551,7 @@ export default {
     },
     overlapItems() {
       return this.overlapFeatures.map((idx) => {
-        return { index: idx, label: `Feature ${idx + 1}` };
+        return { index: idx, label: `#${idx + 1}` };
       });
     },
 
