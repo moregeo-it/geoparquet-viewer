@@ -74,9 +74,52 @@
                   :map-center="mapCenter"
                   :map-zoom="mapZoom"
                   @select="onMapSelect"
+                  @selectMultiple="onOverlapMapSelect"
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
                 />
+                <!-- Feature overlap picker -->
+                <v-menu
+                  v-model="showOverlap"
+                  location="bottom start"
+                  :close-on-content-click="false"
+                  :transition="false"
+                  @update:model-value="
+                    (val) => {
+                      if (!val) dismissOverlap();
+                    }
+                  "
+                >
+                  <template #activator="{ props: menuProps }">
+                    <span v-bind="menuProps" class="overlap-anchor" :style="overlapAnchorStyle" />
+                  </template>
+                  <v-card>
+                    <v-card-title>
+                      <strong
+                        >Features ({{ overlapFeatures.length
+                        }}<template v-if="overlapDepthReached">+</template>)</strong
+                      >
+                    </v-card-title>
+                    <v-card-subtitle v-if="overlapDepthReached"
+                      >Only the first 100 are shown.</v-card-subtitle
+                    >
+                    <v-list density="compact" class="overlap-list">
+                      <v-list-item
+                        v-for="item in overlapItems"
+                        :key="item.index"
+                        :active="selectedIndex === item.index"
+                        @click="onMapSelect(item.index)"
+                      >
+                        <v-list-item-title>{{ item.label }}</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                    <v-card-actions>
+                      <v-btn @click="dismissOverlap" class="w-100" variant="outlined" color="error"
+                        >Close</v-btn
+                      >
+                    </v-card-actions>
+                  </v-card>
+                </v-menu>
                 <div
                   v-if="hasMore && visibleColumns.length === 0"
                   class="map-load-more d-flex justify-center ga-2 pa-2"
@@ -299,6 +342,9 @@ export default {
 
       // Selection
       selectedIndex: null,
+      overlapFeatures: [],
+      overlapPosition: null,
+      overlapDepthReached: false,
 
       // Filters
       filters: [],
@@ -488,6 +534,30 @@ export default {
     /** Whether Vuetify is currently using the dark theme */
     isDark() {
       return this.$vuetify.theme.current.dark;
+    },
+
+    // ── Overlap picker ──────────────────────────────
+    showOverlap: {
+      get() {
+        return this.overlapFeatures.length > 0;
+      },
+      set() {
+        /* controlled via dismissOverlap */
+      }
+    },
+    overlapAnchorStyle() {
+      if (!this.overlapPosition) return 'top:0;left:0;';
+      const panel = this.$refs.mapView?.$el;
+      if (!panel) return 'top:0;left:0;';
+      const rect = panel.getBoundingClientRect();
+      const x = this.overlapPosition.x - rect.left;
+      const y = this.overlapPosition.y - rect.top;
+      return `top:${y}px;left:${x}px;`;
+    },
+    overlapItems() {
+      return this.overlapFeatures.map((idx) => {
+        return { index: idx, label: `#${idx + 1}` };
+      });
     },
 
     isMobile() {
@@ -1074,6 +1144,18 @@ export default {
       this.selectedIndex = index;
     },
 
+    onOverlapMapSelect({ indices, position, depthReached }) {
+      this.overlapFeatures = indices;
+      this.overlapPosition = position;
+      this.overlapDepthReached = !!depthReached;
+    },
+
+    dismissOverlap() {
+      this.overlapFeatures = [];
+      this.overlapPosition = null;
+      this.overlapDepthReached = false;
+    },
+
     // ── Viewport-driven spatial filtering ──────────────────
     onViewportChange({ bbox, center, zoom }) {
       this.viewportBounds = bbox;
@@ -1295,6 +1377,18 @@ export default {
   overflow: hidden;
   height: 100%;
   position: relative;
+}
+
+.overlap-anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.overlap-list {
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .map-load-more {
