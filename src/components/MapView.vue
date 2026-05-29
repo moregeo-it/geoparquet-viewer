@@ -51,7 +51,7 @@ export default {
     mapCenter: { type: Array, default: null },
     mapZoom: { type: Number, default: null }
   },
-  emits: ['select', 'viewportChange', 'reloadViewport'],
+  emits: ['select', 'selectMultiple', 'viewportChange', 'reloadViewport'],
   data() {
     return {
       map: null,
@@ -189,10 +189,40 @@ export default {
         const selectedIndex = this.selectedIndex;
         const SELECTED_FILL = this.isDark ? SELECTED_FILL_DARK : SELECTED_FILL_LIGHT;
         const SELECTED_LINE = this.isDark ? SELECTED_LINE_DARK : SELECTED_LINE_LIGHT;
-        const emitSelectFromInfo = (info) => {
-          const index = this.rowIndex(info?.object);
-          if (index === null) return;
-          this.$emit('select', index === selectedIndex ? null : index);
+
+        const PICK_DEPTH = 100;
+        const handleClick = (info) => {
+          if (!info.picked || !this.overlay?._deck) return;
+          const hits = this.overlay._deck.pickMultipleObjects({
+            x: info.x,
+            y: info.y,
+            depth: PICK_DEPTH
+          });
+
+          const seen = new Set();
+          const indices = [];
+          for (const hit of hits) {
+            const idx = this.rowIndex(hit.object);
+            if (idx !== null && !seen.has(idx)) {
+              seen.add(idx);
+              indices.push(idx);
+            }
+          }
+          if (indices.length === 0) return;
+
+          if (indices.length === 1) {
+            const idx = indices[0];
+            this.$emit('select', idx === selectedIndex ? null : idx);
+          } else {
+            const canvas = this.map.getCanvas();
+            const rect = canvas.getBoundingClientRect();
+            this.$emit('selectMultiple', {
+              indices,
+              position: { x: rect.left + info.x, y: rect.top + info.y },
+              depthReached: hits.length >= PICK_DEPTH
+            });
+          }
+          return true;
         };
 
         for (let i = 0; i < this.geoArrowResults.length; i++) {
@@ -228,7 +258,7 @@ export default {
                     this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
                   }
                 },
-                onClick: emitSelectFromInfo,
+                onClick: handleClick,
                 updateTriggers: {
                   getFillColor: [selectedIndex, this.isDark]
                 }
@@ -255,7 +285,7 @@ export default {
                     this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
                   }
                 },
-                onClick: emitSelectFromInfo,
+                onClick: handleClick,
                 updateTriggers: {
                   getColor: [selectedIndex, this.isDark]
                 }
@@ -281,7 +311,7 @@ export default {
                     this.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
                   }
                 },
-                onClick: emitSelectFromInfo,
+                onClick: handleClick,
                 updateTriggers: {
                   getFillColor: [selectedIndex, this.isDark],
                   getLineColor: [selectedIndex, this.isDark]
