@@ -92,28 +92,32 @@
                   <template #activator="{ props: menuProps }">
                     <span v-bind="menuProps" class="overlap-anchor" :style="overlapAnchorStyle" />
                   </template>
-                  <v-list density="compact" class="overlap-list">
-                    <v-list-subheader
-                      >{{ overlapFeatures.length }} features at this point</v-list-subheader
+                  <v-card>
+                    <v-card-title>
+                      <strong
+                        >{{ overlapFeatures.length
+                        }}<template v-if="overlapDepthReached">+</template> features found</strong
+                      >
+                    </v-card-title>
+                    <v-card-subtitle v-if="overlapDepthReached"
+                      >Only the first 100 are shown.</v-card-subtitle
                     >
-                    <v-list-item
-                      v-for="item in overlapItems"
-                      :key="item.index"
-                      :active="selectedIndex === item.index"
-                      @click="onMapSelect(item.index)"
-                    >
-                      <v-list-item-title>{{ item.label }}</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item v-if="overlapDepthReached" disabled>
-                      <v-list-item-title class="text-caption text-medium-emphasis">
-                        There could be more geometries
-                      </v-list-item-title>
-                    </v-list-item>
-                    <v-divider class="my-1" />
-                    <v-list-item @click="dismissOverlap">
-                      <v-list-item-title class="text-center">Close</v-list-item-title>
-                    </v-list-item>
-                  </v-list>
+                    <v-list density="compact" class="overlap-list">
+                      <v-list-item
+                        v-for="item in overlapItems"
+                        :key="item.index"
+                        :active="selectedIndex === item.index"
+                        @click="onMapSelect(item.index)"
+                      >
+                        <v-list-item-title>{{ item.label }}</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                    <v-card-actions>
+                      <v-btn @click="dismissOverlap" class="w-100" variant="outlined" color="error"
+                        >Close</v-btn
+                      >
+                    </v-card-actions>
+                  </v-card>
                 </v-menu>
                 <div
                   v-if="hasMore && visibleColumns.length === 0"
