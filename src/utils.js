@@ -120,7 +120,7 @@ export default class Utils {
     p.set('url', url);
     if (Array.isArray(columns)) {
       if (columns.length > 0) {
-      columns.forEach((col) => p.append('c', col));
+        columns.forEach((col) => p.append('c', col));
       } else {
         p.set('noCol', '1');
       }

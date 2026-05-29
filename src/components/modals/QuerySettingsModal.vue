@@ -109,13 +109,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="cancel">Cancel</v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          @click="submit"
-        >
-          Load
-        </v-btn>
+        <v-btn color="primary" variant="flat" @click="submit"> Load </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

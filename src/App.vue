@@ -43,7 +43,10 @@
                   :is-dark="isDark"
                   @select="onTableSelect"
                 />
-                <div v-if="hasMore && visibleColumns.length > 0" class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2">
+                <div
+                  v-if="hasMore && visibleColumns.length > 0"
+                  class="d-flex justify-center ga-2 pa-1ee-variant mb-2 mt-2"
+                >
                   <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
                     Load more ({{ pageSize.toLocaleString() }} rows)
                   </v-btn>
