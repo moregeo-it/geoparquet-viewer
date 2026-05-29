@@ -112,7 +112,7 @@
         <v-btn
           color="primary"
           variant="flat"
-          :disabled="localSelectedColumns.length === 0"
+          :disabled="localSelectedColumns.length === 0 && !primaryGeoColumn"
           @click="submit"
         >
           Load

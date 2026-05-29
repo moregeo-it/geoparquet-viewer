@@ -48,6 +48,18 @@ export default class Utils {
   /**
    * Parse all shareable state from the current URL.
    * Called once on mount — single source of truth for URL → app state.
+   *
+   * Supported query parameters:
+   *  - `url`      — Remote Parquet file URL.
+   *  - `c`        — Column name (repeatable). First entry is the geometry column.
+   *  - `pageSize` — Positive integer, rows per page.
+   *  - `map`      — Camera position as `zoom~lat~lng` (tilde-separated).
+   *  - `bbox`     — Spatial filter as `west~south~east~north` (WGS 84, tilde-separated).
+   *
+   * Compound values use `~` as separator to avoid URL-encoding issues with commas.
+   *
+   * @returns {{url: string|null, columns: string[]|null, pageSize: number|null, center: [number,number]|null, zoom: number|null, bbox: number[]|null}}
+   *   Frozen object — properties are null when the parameter is absent or invalid.
    */
   static parseUrlState() {
     const p = new URLSearchParams(window.location.search);
@@ -87,17 +99,29 @@ export default class Utils {
   }
 
   /**
-   * Write shareable state to URL (replaceState — no navigation, no history entry).
-   * Only non-default values are written.
+   * Write shareable state to URL via `history.replaceState` (no navigation, no history entry).
+   * Only non-default values are written; if `url` is falsy the query string is cleared entirely.
+   *
+   * @param {object} state
+   * @param {string|null} state.url - Remote file URL. When null/empty, all params are removed.
+   * @param {string[]|null} state.columns - Selected display columns (without the geometry column).
+   * @param {number|null} state.pageSize - Rows per page (omitted when default).
+   * @param {[number, number]|null} state.center - Map center as [lat, lng].
+   * @param {number|null} state.zoom - Map zoom level.
+   * @param {number[]|null} state.bbox - Spatial filter [west, south, east, north] in WGS 84.
+   * @param {string|null} state.geoColumn - Primary geometry column name (prepended to `c` list).
    */
-  static syncUrlParams({ url, columns, pageSize, center, zoom, bbox }) {
+  static syncUrlParams({ url, columns, pageSize, center, zoom, bbox, geoColumn }) {
     if (!url) {
       history.replaceState({}, '', window.location.pathname);
       return;
     }
     const p = new URLSearchParams();
     p.set('url', url);
-    if (columns && columns.length > 0) columns.forEach((col) => p.append('c', col));
+    if (Array.isArray(columns)) {
+      if (geoColumn) p.append('c', geoColumn);
+      columns.forEach((col) => p.append('c', col));
+    }
     if (pageSize && pageSize !== null) p.set('pageSize', String(pageSize));
     if (center && zoom != null) {
       p.set('map', `${zoom.toFixed(2)}~${center[0].toFixed(5)}~${center[1].toFixed(5)}`);
