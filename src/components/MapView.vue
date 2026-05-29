@@ -193,7 +193,11 @@ export default {
         const PICK_DEPTH = 100;
         const handleClick = (info) => {
           if (!info.picked || !this.overlay?._deck) return;
-          const hits = this.overlay._deck.pickMultipleObjects({ x: info.x, y: info.y, depth: PICK_DEPTH });
+          const hits = this.overlay._deck.pickMultipleObjects({
+            x: info.x,
+            y: info.y,
+            depth: PICK_DEPTH
+          });
 
           const seen = new Set();
           const indices = [];
