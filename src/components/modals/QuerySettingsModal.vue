@@ -112,7 +112,6 @@
         <v-btn
           color="primary"
           variant="flat"
-          :disabled="localSelectedColumns.length === 0"
           @click="submit"
         >
           Load
