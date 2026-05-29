@@ -27,7 +27,7 @@
         >
           <LoadingOverlay v-if="initialLoading" :message="statusMessage" />
           <SplitPanes :horizontal="isMobile">
-            <PaneView>
+            <PaneView v-if="visibleColumns.length > 0">
               <div class="left-panel d-flex flex-column">
                 <FilterPanel
                   v-if="visibleColumns.length > 0"
@@ -77,6 +77,23 @@
                   @viewportChange="onViewportChange"
                   @reloadViewport="reloadForViewport"
                 />
+                <div
+                  v-if="hasMore && visibleColumns.length === 0"
+                  class="map-load-more d-flex justify-center ga-2 pa-2"
+                >
+                  <v-btn size="small" variant="outlined" @click="loadMore" :disabled="loading">
+                    Load more geometry ({{ pageSize.toLocaleString() }} rows)
+                  </v-btn>
+                  <v-btn
+                    v-if="remainingRows > pageSize"
+                    size="small"
+                    variant="outlined"
+                    @click="confirmLoadAllIfLarge"
+                    :disabled="loading"
+                  >
+                    Load all ({{ remainingRows.toLocaleString() }} rows)
+                  </v-btn>
+                </div>
               </div>
             </PaneView>
           </SplitPanes>
@@ -800,8 +817,9 @@ export default {
         const init = this.urlInit;
         if (init?.columns) {
           const pageSize = init.pageSize;
+          const tableColumns = init.columns.filter((c) => c !== this.primaryGeoColumn);
           if (init.bbox && this.hasBboxCovering) {
-            this.selectedColumns = init.columns;
+            this.selectedColumns = tableColumns;
             this.pageSize = pageSize;
             this.viewportBounds = init.bbox;
             this.viewportActive = true;
@@ -809,7 +827,7 @@ export default {
             this.reloadForViewport();
           } else {
             this.applyQuerySettings({
-              selectedColumns: init.columns,
+              selectedColumns: tableColumns,
               pageSize
             });
           }
@@ -870,7 +888,8 @@ export default {
         pageSize: this.pageSize,
         center: this.mapCenter,
         zoom: this.mapZoom,
-        bbox: this.queryBbox
+        bbox: this.queryBbox,
+        geoColumn: this.primaryGeoColumn
       });
     },
 
@@ -1272,6 +1291,36 @@ export default {
 .right-panel {
   overflow: hidden;
   height: 100%;
+  position: relative;
+}
+
+.map-load-more {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  background: rgba(var(--v-theme-surface), 0.85);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+/* Splitpanes theme overrides */
+.content-panels .splitpanes__splitter {
+  background: rgba(var(--v-border-color), var(--v-border-opacity));
+  position: relative;
+}
+.content-panels .splitpanes--vertical > .splitpanes__splitter {
+  width: 5px;
+  min-width: 5px;
+}
+.content-panels .splitpanes--horizontal > .splitpanes__splitter {
+  height: 5px;
+  min-height: 5px;
+}
+.content-panels .splitpanes__splitter:hover,
+.content-panels .splitpanes__splitter:active {
+  background: rgb(var(--v-theme-primary));
 }
 
 @media (max-width: 768px) {
