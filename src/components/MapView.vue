@@ -18,7 +18,7 @@ import {
   GeoArrowPathLayer,
   GeoArrowPolygonLayer,
   GeoArrowScatterplotLayer
-} from '@geoarrow/deck.gl-layers';
+} from '@geoarrow/deck.gl-geoarrow';
 import { parseWKB } from '@walkthru-earth/objex-utils';
 
 const NORMAL_FILL = [51, 153, 204, 120];
