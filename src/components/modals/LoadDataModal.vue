@@ -101,6 +101,10 @@ export default {
         {
           url: 'https://data.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IDN/IDN.parquet',
           title: 'Open buildings in Indonesia (16 GB, polygons)'
+        },
+        {
+          url: 'https://github.com/geoarrow/geoarrow-data/releases/download/v0.2.0/ns-water_elevation_native.parquet',
+          title: 'Water elevation data with GeoArrow encoding (110 MB, points)'
         }
       ]
     };

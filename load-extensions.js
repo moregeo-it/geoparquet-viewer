@@ -27,7 +27,9 @@ console.log(`DuckDB version: ${duckdbVersion}`);
 const EXTENSIONS = [
   `https://extensions.duckdb.org/${duckdbVersion}/wasm_eh/httpfs.duckdb_extension.wasm`,
   `https://extensions.duckdb.org/${duckdbVersion}/wasm_eh/spatial.duckdb_extension.wasm`,
-  `https://extensions.duckdb.org/${duckdbVersion}/wasm_eh/parquet.duckdb_extension.wasm`
+  `https://extensions.duckdb.org/${duckdbVersion}/wasm_eh/parquet.duckdb_extension.wasm`,
+  // Available for v1.5.2 or later
+  `https://community-extensions.duckdb.org/${duckdbVersion}/wasm_eh/duck_geoarrow.duckdb_extension.wasm`,
 ];
 
 for (const url of EXTENSIONS) {
