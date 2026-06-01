@@ -15,10 +15,6 @@ let _conn = null;
 let _initPromise = null;
 let _lastProgressMsg = null;
 
-// Cache: source → { geoColumn → boolean } for isGeometryType results.
-// Avoids repeated DESCRIBE queries on every queryData/queryCount call.
-const _geomTypeCache = new Map();
-
 const _progressListeners = new Set();
 
 function _emitProgress(msg) {
@@ -62,8 +58,15 @@ export async function initDB(onProgress) {
     ];
 
     const modules = await Promise.all(promises);
-    const [duckdb, duckdb_wasm_eh, duckdb_worker_eh, httpfsExtUrl, spatialExtUrl, parquetExtUrl, duckGeoArrowExtUrl] =
-      modules;
+    const [
+      duckdb,
+      duckdb_wasm_eh,
+      duckdb_worker_eh,
+      httpfsExtUrl,
+      spatialExtUrl,
+      parquetExtUrl,
+      duckGeoArrowExtUrl
+    ] = modules;
 
     const mainModule = duckdb_wasm_eh.default;
     const mainWorker = duckdb_worker_eh.default;
@@ -174,71 +177,36 @@ export async function getSchema(source) {
   }));
 }
 
-function classifyGeoColumnType(colType) {
-  const type = colType.toUpperCase();
-  if (type.startsWith('GEOMETRY')) return 'geometry';
-  if (type === 'BLOB' || type === 'BINARY') return 'wkb';
-  if (type.includes('STRUCT') || type.endsWith('[]')) return 'geoarrow_native';
-  return 'wkb';
-}
-
-/**
- * Check whether a geometry column is already typed as GEOMETRY by DuckDB's spatial
- * extension (e.g. "GEOMETRY('EPSG:4258')") rather than a raw BLOB/VARCHAR.
- * When spatial is loaded, GeoParquet geometry columns are automatically decoded
- * to the GEOMETRY type, so ST_GeomFromWKB() must NOT be called on them.
- *
- * @param {string} source - Parquet source path.
- * @param {string} geoColumn - Name of the geometry column.
- * @returns {Promise<boolean>} true if the column type starts with "GEOMETRY".
- */
-export async function getGeoColumnType(source, geoColumn) {
-  // Check cache first to avoid repeated DESCRIBE queries.
-  const cacheKey = source;
-  if (_geomTypeCache.has(cacheKey)) {
-    const cached = _geomTypeCache.get(cacheKey);
-    if (geoColumn in cached) return cached[geoColumn];
-  }
-  try {
-    const schema = await getSchema(source);
-    // Cache results for ALL columns in one go.
-    const entry = {};
-    for (const col of schema) entry[col.name] = classifyGeoColumnType(col.type);
-    _geomTypeCache.set(cacheKey, entry);
-    return entry[geoColumn] ?? 'wkb';
-  } catch {
-    return 'wkb';
-  }
-}
-
-/**
- * Cache the geometry type detection from an already-fetched schema.
- * Call this after getSchema() to avoid a redundant DESCRIBE query later.
- */
-export function cacheSchemaGeomTypes(source, schema) {
-  const entry = {};
-  for (const col of schema) entry[col.name] = classifyGeoColumnType(col.type);
-  _geomTypeCache.set(source, entry);
-}
-
 /**
  * Return a SQL expression that produces a GEOMETRY value from a geometry column,
  * handling both the case where DuckDB has already decoded it as GEOMETRY (spatial
  * extension loaded) and the raw BLOB/WKB case.
  *
  * @param {string} geoColumn - Column name.
- * @param {boolean} alreadyGeometry - true if the column is already GEOMETRY type.
+ * @param {string} encoding - Encoding type ('geometry', 'wkb', 'geoarrow_native').
  * @returns {string} SQL expression.
  */
-function geomExpr(geoColumn, geoColumnType) {
-  switch (geoColumnType) {
-    case 'geometry':
-      return `"${geoColumn}"`;
+function geomExpr(geoColumn, encoding) {
+  switch (encoding?.toLowerCase()) {
     case 'wkb':
-      return `ST_GeomFromWKB("${geoColumn}")`;
-    case 'geoarrow_native':
-      return `ST_Point(${geoColumn}.x, ${geoColumn}.y)::GEOMETRY`;
+    case undefined:
+    case null:
+      return `"${geoColumn}"`;
+
+    case 'wkt':
+      return `ST_GeomFromText("${geoColumn}")`;
+
+    case 'point':
+      return `ST_Point("${geoColumn}".x, "${geoColumn}".y)`;
+    case 'linestring':
+    case 'polygon':
+    case 'multipoint':
+    case 'multilinestring':
+    case 'multipolygon':
+      return null;
+
     default:
+      // Fallback to WKB parsing for unknown types — allows some level of support for custom encodings and GeoArrow structs.
       return `ST_GeomFromWKB("${geoColumn}")`;
   }
 }
@@ -259,7 +227,6 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   // 1. Schema — also populates geometry type cache for queryData/queryCount
   onProgress('Reading schema...');
   const schema = await getSchema(source);
-  cacheSchemaGeomTypes(source, schema);
 
   // Attempt to get row group size from parquet_metadata() for better pagination defaults.
   onProgress('Reading row group metadata...');
@@ -480,6 +447,7 @@ export async function queryData(
   source,
   {
     geoColumn = null,
+    encoding = null,
     filters = [],
     bbox = null,
     sourceCrs = null,
@@ -490,8 +458,6 @@ export async function queryData(
   } = {}
 ) {
   const escaped = escapeSource(source);
-
-  const geoColumnType = geoColumn ? await getGeoColumnType(source, geoColumn) : 'wkb';
 
   // Pre-transform viewport bbox to source CRS when using covering columns.
   let effectiveBbox = bbox;
@@ -506,16 +472,13 @@ export async function queryData(
   // Build WHERE clause (filters + optional viewport bbox).
   const where = buildWhereClause(filters, effectiveBbox, geoColumn, bboxCovering);
 
-  let selectCols = '*';
-  if (columns && columns.length > 0) {
-    const cols = [...columns];
-    selectCols = cols.map((col) => `"${col}"`).join(', ');
-  }
-
+  let isNative = false;
   let geoSelect = '';
   if (geoColumn) {
-    const baseExpr = geomExpr(geoColumn, geoColumnType);
-    if (sourceCrs) {
+    const baseExpr = geomExpr(geoColumn, encoding);
+    if (baseExpr === null) {
+      isNative = true;
+    } else if (sourceCrs) {
       // Reproject to WGS84 when source CRS is known.
       const crsLiteral = sourceCrs.replace(/'/g, "''");
       const transformedExpr = `ST_Transform(${baseExpr}, '${crsLiteral}', 'EPSG:4326', true)`;
@@ -524,7 +487,7 @@ export async function queryData(
       // Data already in WGS84 (or no CRS metadata) — export as WKB.
       geoSelect = `, ST_AsWKB(${baseExpr}) as __wkb`;
     }
-}
+  }
 
   let pagination = '';
   if (limit) {
@@ -533,14 +496,21 @@ export async function queryData(
     pagination = ` OFFSET ${offset}`;
   }
 
+  // Select only requested columns (+ geo) instead of * when a column list is provided.
+  // This avoids fetching large unused columns (bbox structs, binary blobs, etc.)
+  // and significantly reduces data transfer for wide tables.
+  let selectCols = '*';
+  if (columns && columns.length > 0) {
+    selectCols = columns.map((c) => `"${c}"`).join(', ');
+  }
+
   const sql = `SELECT ${selectCols}${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
-  console.log(sql);
 
   const table = await query(sql);
 
-  table._geoColumn = geoColumn;
-  table._sourceCrs = sourceCrs;
-  table._geoColumnType = geoColumnType;
+  if (isNative) {
+    table._isNativeGeoArrow = true;
+  }
 
   return table;
 }
