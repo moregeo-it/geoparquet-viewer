@@ -901,7 +901,7 @@ export default {
         this.statusMessage = '';
         this.loading = false;
         const init = this.urlInit;
-        if (init?.columns !== null) {
+        if (init && init.columns !== null) {
           const pageSize = init.pageSize;
           if (init.bbox && this.hasBboxCovering) {
             this.selectedColumns = init.columns;
