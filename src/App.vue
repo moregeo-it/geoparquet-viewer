@@ -1047,6 +1047,8 @@ export default {
       // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
       const tableColNames = this.visibleColumns.map((c) => c.name);
       const geoCol = this.loadGeometry ? this.primaryGeoColumn : null;
+
+      const colMeta = this.geoMetadata?.columns?.[geoCol];
       const selectColumns = geoCol ? [...tableColNames, geoCol] : tableColNames;
 
       if (tableColNames.length === 0 && !geoCol) {
@@ -1061,6 +1063,7 @@ export default {
       const result = await queryData(this.source, {
         geoColumn: geoCol,
         filters: this.filters,
+        encoding: colMeta?.encoding || null,
         bbox: this.spatialFilterActive ? this.viewportBounds : null,
         sourceCrs: this.sourceCrsString,
         columns: selectColumns,

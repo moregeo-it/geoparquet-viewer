@@ -198,10 +198,10 @@ function geomExpr(geoColumn, encoding) {
 
     case 'point':
       return `ST_Point("${geoColumn}".x, "${geoColumn}".y)`;
-    case 'linestring':
-    case 'polygon':
     case 'multipoint':
+    case 'linestring':
     case 'multilinestring':
+    case 'polygon':
     case 'multipolygon':
       return null;
 
@@ -472,13 +472,10 @@ export async function queryData(
   // Build WHERE clause (filters + optional viewport bbox).
   const where = buildWhereClause(filters, effectiveBbox, geoColumn, bboxCovering);
 
-  let isNative = false;
   let geoSelect = '';
   if (geoColumn) {
     const baseExpr = geomExpr(geoColumn, encoding);
-    if (baseExpr === null) {
-      isNative = true;
-    } else if (sourceCrs) {
+    if (sourceCrs) {
       // Reproject to WGS84 when source CRS is known.
       const crsLiteral = sourceCrs.replace(/'/g, "''");
       const transformedExpr = `ST_Transform(${baseExpr}, '${crsLiteral}', 'EPSG:4326', true)`;
@@ -506,13 +503,7 @@ export async function queryData(
 
   const sql = `SELECT ${selectCols}${geoSelect} FROM read_parquet('${escaped}')${where}${pagination}`;
 
-  const table = await query(sql);
-
-  if (isNative) {
-    table._isNativeGeoArrow = true;
-  }
-
-  return table;
+  return query(sql);
 }
 
 /**
