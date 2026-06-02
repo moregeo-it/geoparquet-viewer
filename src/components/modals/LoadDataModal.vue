@@ -79,12 +79,20 @@ export default {
       exampleList: [
         // tiny < 5 MB, small < 50 MB, medium < 200 MB, large < 1 GB, very large >= 1 GB
         {
+          url: 'https://raw.githubusercontent.com/geoarrow/geoarrow-data/v0.2.0/natural-earth/files/natural-earth_cities_native.parquet',
+          title: 'Capital cities (< 1 MB, points, arrow-encoded)'
+        },
+        {
           url: 'https://raw.githubusercontent.com/visgl/loaders.gl/master/modules/parquet/test/data/geoparquet/airports.parquet',
           title: 'Airports (< 1 MB, points)'
         },
         {
           url: 'https://data.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
           title: 'Energy performance certificates in Wolverhampton, UK (2 MB, points)'
+        },
+        {
+          url: 'https://raw.githubusercontent.com/developmentseed/labs-375-stac-geoparquet-backend/refs/heads/main/data/naip.parquet',
+          title: 'STAC Geoparquet of NAIP data (2 MB, polygons)'
         },
         {
           url: 'https://data.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
@@ -101,10 +109,6 @@ export default {
         {
           url: 'https://data.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IDN/IDN.parquet',
           title: 'Open buildings in Indonesia (16 GB, polygons)'
-        },
-        {
-          url: 'https://github.com/geoarrow/geoarrow-data/releases/download/v0.2.0/ns-water_elevation_native.parquet',
-          title: 'Water elevation data with GeoArrow encoding (110 MB, points)'
         }
       ]
     };
