@@ -686,7 +686,7 @@ export default {
           ]
         }
       ].filter(Boolean);
-      if (!this.isStable || version === '1.0.0') {
+      if (!this.isStable || version === '1.0.0' || version === '1.1.0') {
         groups.unshift({
           items: [
             {
