@@ -15,10 +15,6 @@ let _conn = null;
 let _initPromise = null;
 let _lastProgressMsg = null;
 
-// Cache: source → { geoColumn → boolean } for isGeometryType results.
-// Avoids repeated DESCRIBE queries on every queryData/queryCount call.
-const _geomTypeCache = new Map();
-
 const _progressListeners = new Set();
 
 function _emitProgress(msg) {
@@ -172,59 +168,72 @@ export async function getSchema(source) {
 }
 
 /**
- * Check whether a geometry column is already typed as GEOMETRY by DuckDB's spatial
- * extension (e.g. "GEOMETRY('EPSG:4258')") rather than a raw BLOB/VARCHAR.
- * When spatial is loaded, GeoParquet geometry columns are automatically decoded
- * to the GEOMETRY type, so ST_GeomFromWKB() must NOT be called on them.
- *
- * @param {string} source - Parquet source path.
- * @param {string} geoColumn - Name of the geometry column.
- * @returns {Promise<boolean>} true if the column type starts with "GEOMETRY".
- */
-export async function isGeometryType(source, geoColumn) {
-  // Check cache first to avoid repeated DESCRIBE queries.
-  const cacheKey = source;
-  if (_geomTypeCache.has(cacheKey)) {
-    const cached = _geomTypeCache.get(cacheKey);
-    if (geoColumn in cached) return cached[geoColumn];
-  }
-  try {
-    const schema = await getSchema(source);
-    // Cache results for ALL columns in one go.
-    const entry = {};
-    for (const col of schema) {
-      entry[col.name] = col.type.toUpperCase().startsWith('GEOMETRY');
-    }
-    _geomTypeCache.set(cacheKey, entry);
-    return entry[geoColumn] ?? false;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Cache the geometry type detection from an already-fetched schema.
- * Call this after getSchema() to avoid a redundant DESCRIBE query later.
- */
-export function cacheSchemaGeomTypes(source, schema) {
-  const entry = {};
-  for (const col of schema) {
-    entry[col.name] = col.type.toUpperCase().startsWith('GEOMETRY');
-  }
-  _geomTypeCache.set(source, entry);
-}
-
-/**
  * Return a SQL expression that produces a GEOMETRY value from a geometry column,
  * handling both the case where DuckDB has already decoded it as GEOMETRY (spatial
  * extension loaded) and the raw BLOB/WKB case.
  *
+ * For native GeoArrow encodings (struct/list types), geometry is constructed via
+ * WKT since DuckDB does not support direct CAST from structs to GEOMETRY.
+ *
  * @param {string} geoColumn - Column name.
- * @param {boolean} alreadyGeometry - true if the column is already GEOMETRY type.
- * @returns {string} SQL expression.
+ * @param {string} encoding - Encoding type ('wkb', 'wkt', or native geoarrow type name).
+ * @returns {string|null} SQL expression, or null if conversion is unsupported.
  */
-function geomExpr(geoColumn, alreadyGeometry) {
-  return alreadyGeometry ? `"${geoColumn}"` : `ST_GeomFromWKB("${geoColumn}")`;
+function geomExpr(geoColumn, encoding) {
+  const col = `"${geoColumn}"`;
+  // Lambda fragment: converts a point struct {x, y} to a WKT coordinate string "x y".
+  const ptToWkt = `pt -> CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR)`;
+
+  switch (encoding?.toLowerCase()) {
+    case 'wkb':
+    case undefined:
+    case null:
+      return col;
+
+    case 'wkt':
+      return `ST_GeomFromText(${col})`;
+
+    // ── Native GeoArrow encodings ──────────────────────────────────────
+    // Construct GEOMETRY via WKT from the struct/list coordinate arrays.
+
+    case 'point':
+      // STRUCT(x DOUBLE, y DOUBLE) → GEOMETRY Point
+      return `CASE WHEN ${col} IS NOT NULL AND ${col}.x IS NOT NULL THEN ST_Point(${col}.x, ${col}.y) ELSE NULL END`;
+
+    case 'linestring':
+      // LIST(STRUCT(x,y)) → LINESTRING(x1 y1, x2 y2, ...)
+      return `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('LINESTRING(' || array_to_string(list_transform(${col}, ${ptToWkt}), ', ') || ')') ELSE NULL END`;
+
+    case 'polygon':
+      // LIST(LIST(STRUCT(x,y))) → POLYGON((x1 y1, ...), (x2 y2, ...))
+      return (
+        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('POLYGON(' || array_to_string(list_transform(${col}, ` +
+        `ring -> '(' || array_to_string(list_transform(ring, ${ptToWkt}), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      );
+
+    case 'multipoint':
+      // LIST(STRUCT(x,y)) → MULTIPOINT((x1 y1), (x2 y2), ...)
+      return `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTIPOINT(' || array_to_string(list_transform(${col}, pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'), ', ') || ')') ELSE NULL END`;
+
+    case 'multilinestring':
+      // LIST(LIST(STRUCT(x,y))) → MULTILINESTRING((x1 y1, x2 y2), (...))
+      return (
+        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTILINESTRING(' || array_to_string(list_transform(${col}, ` +
+        `line -> '(' || array_to_string(list_transform(line, ${ptToWkt}), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      );
+
+    case 'multipolygon':
+      // LIST(LIST(LIST(STRUCT(x,y)))) → MULTIPOLYGON(((x y, ...), (...)), ((...)))
+      return (
+        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTIPOLYGON(' || array_to_string(list_transform(${col}, ` +
+        `poly -> '(' || array_to_string(list_transform(poly, ` +
+        `ring -> '(' || array_to_string(list_transform(ring, ${ptToWkt}), ', ') || ')'), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      );
+
+    default:
+      // Fallback to WKB parsing for unknown types.
+      return `ST_GeomFromWKB(${col})`;
+  }
 }
 
 /**
@@ -243,7 +252,6 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   // 1. Schema — also populates geometry type cache for queryData/queryCount
   onProgress('Reading schema...');
   const schema = await getSchema(source);
-  cacheSchemaGeomTypes(source, schema);
 
   // Attempt to get row group size from parquet_metadata() for better pagination defaults.
   onProgress('Reading row group metadata...');
@@ -334,7 +342,13 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     );
     columnSizes = {};
     for (const row of colSizeResult.toArray()) {
-      columnSizes[String(row.path_in_schema)] = Number(row.total_compressed_size);
+      const path = String(row.path_in_schema);
+      const size = Number(row.total_compressed_size);
+      // For nested types (GeoArrow struct/list), parquet_metadata reports leaf
+      // paths like "geometry, x" / "geometry, y". Aggregate into the top-level
+      // column name so lookups by column name return the total size.
+      const topLevel = path.split(', ')[0];
+      columnSizes[topLevel] = (columnSizes[topLevel] || 0) + size;
     }
   } catch (e) {
     console.warn('Could not read column sizes:', e.message);
@@ -464,25 +478,17 @@ export async function queryData(
   source,
   {
     geoColumn = null,
+    encoding = null,
     filters = [],
     bbox = null,
     sourceCrs = null,
     limit = null,
     offset = 0,
-    alreadyGeometry = null,
     columns = null,
     bboxCovering = null
   } = {}
 ) {
   const escaped = escapeSource(source);
-
-  // If the caller hasn't told us whether the column is already a GEOMETRY type,
-  // detect it now. This matters because DuckDB spatial auto-decodes GeoParquet
-  // geometry columns to GEOMETRY, making ST_GeomFromWKB() fail with a type error.
-  let isAlreadyGeom = alreadyGeometry;
-  if (isAlreadyGeom === null && geoColumn) {
-    isAlreadyGeom = await isGeometryType(source, geoColumn);
-  }
 
   // Pre-transform viewport bbox to source CRS when using covering columns.
   let effectiveBbox = bbox;
@@ -499,8 +505,11 @@ export async function queryData(
 
   let geoSelect = '';
   if (geoColumn) {
-    const baseExpr = geomExpr(geoColumn, isAlreadyGeom);
-    if (sourceCrs) {
+    const baseExpr = geomExpr(geoColumn, encoding);
+    if (!baseExpr) {
+      // Encoding is not convertible to GEOMETRY — skip geometry extraction.
+      // The raw column will still appear in the result for display.
+    } else if (sourceCrs) {
       // Reproject to WGS84 when source CRS is known.
       const crsLiteral = sourceCrs.replace(/'/g, "''");
       const transformedExpr = `ST_Transform(${baseExpr}, '${crsLiteral}', 'EPSG:4326', true)`;
