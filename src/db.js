@@ -53,27 +53,18 @@ export async function initDB(onProgress) {
       import('@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'),
       import('../extensions/httpfs.duckdb_extension.wasm?url'),
       import('../extensions/spatial.duckdb_extension.wasm?url'),
-      import('../extensions/parquet.duckdb_extension.wasm?url'),
-      import('../extensions/duck_geoarrow.duckdb_extension.wasm?url')
+      import('../extensions/parquet.duckdb_extension.wasm?url')
     ];
 
     const modules = await Promise.all(promises);
-    const [
-      duckdb,
-      duckdb_wasm_eh,
-      duckdb_worker_eh,
-      httpfsExtUrl,
-      spatialExtUrl,
-      parquetExtUrl,
-      duckGeoArrowExtUrl
-    ] = modules;
+    const [duckdb, duckdb_wasm_eh, duckdb_worker_eh, httpfsExtUrl, spatialExtUrl, parquetExtUrl] =
+      modules;
 
     const mainModule = duckdb_wasm_eh.default;
     const mainWorker = duckdb_worker_eh.default;
     const httpfsExt = httpfsExtUrl.default;
     const spatialExt = spatialExtUrl.default;
     const parquetExt = parquetExtUrl.default;
-    const duckGeoArrowExt = duckGeoArrowExtUrl.default;
 
     _emitProgress('Starting DuckDB...');
 
@@ -113,7 +104,6 @@ export async function initDB(onProgress) {
     await loadExtension('parquet', parquetExt, 'No data can be loaded.');
     await loadExtension('httpfs', httpfsExt, 'All files will be fully loaded into memory.');
     await loadExtension('spatial', spatialExt, 'Only WGS84-based datasets will show on the map.');
-    await loadExtension('duck_geoarrow', duckGeoArrowExt, 'GeoArrow support is unavailable.');
 
     _progressListeners.clear();
   })();
