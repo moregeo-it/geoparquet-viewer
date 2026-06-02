@@ -182,32 +182,67 @@ export async function getSchema(source) {
  * handling both the case where DuckDB has already decoded it as GEOMETRY (spatial
  * extension loaded) and the raw BLOB/WKB case.
  *
+ * For native GeoArrow encodings (struct/list types), geometry is constructed via
+ * WKT since DuckDB does not support direct CAST from structs to GEOMETRY.
+ *
  * @param {string} geoColumn - Column name.
- * @param {string} encoding - Encoding type ('geometry', 'wkb', 'geoarrow_native').
- * @returns {string} SQL expression.
+ * @param {string} encoding - Encoding type ('wkb', 'wkt', or native geoarrow type name).
+ * @returns {string|null} SQL expression, or null if conversion is unsupported.
  */
 function geomExpr(geoColumn, encoding) {
+  const col = `"${geoColumn}"`;
+  // Lambda fragment: converts a point struct {x, y} to a WKT coordinate string "x y".
+  const ptToWkt = `pt -> CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR)`;
+
   switch (encoding?.toLowerCase()) {
     case 'wkb':
     case undefined:
     case null:
-      return `"${geoColumn}"`;
+      return col;
 
     case 'wkt':
-      return `ST_GeomFromText("${geoColumn}")`;
+      return `ST_GeomFromText(${col})`;
+
+    // ── Native GeoArrow encodings ──────────────────────────────────────
+    // Construct GEOMETRY via WKT from the struct/list coordinate arrays.
 
     case 'point':
-      return `ST_Point("${geoColumn}".x, "${geoColumn}".y)`;
-    case 'multipoint':
+      // STRUCT(x DOUBLE, y DOUBLE) → GEOMETRY Point
+      return `CASE WHEN ${col} IS NOT NULL AND ${col}.x IS NOT NULL THEN ST_Point(${col}.x, ${col}.y) ELSE NULL END`;
+
     case 'linestring':
-    case 'multilinestring':
+      // LIST(STRUCT(x,y)) → LINESTRING(x1 y1, x2 y2, ...)
+      return `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('LINESTRING(' || array_to_string(list_transform(${col}, ${ptToWkt}), ', ') || ')') ELSE NULL END`;
+
     case 'polygon':
+      // LIST(LIST(STRUCT(x,y))) → POLYGON((x1 y1, ...), (x2 y2, ...))
+      return (
+        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('POLYGON(' || array_to_string(list_transform(${col}, ` +
+        `ring -> '(' || array_to_string(list_transform(ring, ${ptToWkt}), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      );
+
+    case 'multipoint':
+      // LIST(STRUCT(x,y)) → MULTIPOINT((x1 y1), (x2 y2), ...)
+      return `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTIPOINT(' || array_to_string(list_transform(${col}, pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'), ', ') || ')') ELSE NULL END`;
+
+    case 'multilinestring':
+      // LIST(LIST(STRUCT(x,y))) → MULTILINESTRING((x1 y1, x2 y2), (...))
+      return (
+        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTILINESTRING(' || array_to_string(list_transform(${col}, ` +
+        `line -> '(' || array_to_string(list_transform(line, ${ptToWkt}), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      );
+
     case 'multipolygon':
-      return null;
+      // LIST(LIST(LIST(STRUCT(x,y)))) → MULTIPOLYGON(((x y, ...), (...)), ((...)))
+      return (
+        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTIPOLYGON(' || array_to_string(list_transform(${col}, ` +
+        `poly -> '(' || array_to_string(list_transform(poly, ` +
+        `ring -> '(' || array_to_string(list_transform(ring, ${ptToWkt}), ', ') || ')'), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      );
 
     default:
-      // Fallback to WKB parsing for unknown types — allows some level of support for custom encodings and GeoArrow structs.
-      return `ST_GeomFromWKB("${geoColumn}")`;
+      // Fallback to WKB parsing for unknown types.
+      return `ST_GeomFromWKB(${col})`;
   }
 }
 
@@ -475,7 +510,10 @@ export async function queryData(
   let geoSelect = '';
   if (geoColumn) {
     const baseExpr = geomExpr(geoColumn, encoding);
-    if (sourceCrs) {
+    if (!baseExpr) {
+      // Encoding is not convertible to GEOMETRY — skip geometry extraction.
+      // The raw column will still appear in the result for display.
+    } else if (sourceCrs) {
       // Reproject to WGS84 when source CRS is known.
       const crsLiteral = sourceCrs.replace(/'/g, "''");
       const transformedExpr = `ST_Transform(${baseExpr}, '${crsLiteral}', 'EPSG:4326', true)`;
