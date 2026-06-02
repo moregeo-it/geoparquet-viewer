@@ -1,0 +1,1 @@
+var e=`/assets/httpfs.duckdb_extension-B1eDqdsf.wasm`;export{e as default};

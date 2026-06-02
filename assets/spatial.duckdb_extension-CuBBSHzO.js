@@ -1,0 +1,1 @@
+var e=`/assets/spatial.duckdb_extension-BcEIJB6V.wasm`;export{e as default};

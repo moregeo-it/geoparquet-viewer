@@ -1,0 +1,1 @@
+var e=`/assets/parquet.duckdb_extension-pew7QeNC.wasm`;export{e as default};
