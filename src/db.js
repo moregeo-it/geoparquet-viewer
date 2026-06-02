@@ -342,7 +342,13 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
     );
     columnSizes = {};
     for (const row of colSizeResult.toArray()) {
-      columnSizes[String(row.path_in_schema)] = Number(row.total_compressed_size);
+      const path = String(row.path_in_schema);
+      const size = Number(row.total_compressed_size);
+      // For nested types (GeoArrow struct/list), parquet_metadata reports leaf
+      // paths like "geometry, x" / "geometry, y". Aggregate into the top-level
+      // column name so lookups by column name return the total size.
+      const topLevel = path.split(', ')[0];
+      columnSizes[topLevel] = (columnSizes[topLevel] || 0) + size;
     }
   } catch (e) {
     console.warn('Could not read column sizes:', e.message);
