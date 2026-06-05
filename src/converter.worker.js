@@ -94,6 +94,35 @@ async function detectAlreadyGeometry(escaped, geoColumn) {
   return false;
 }
 
+async function buildGeoExpr(geomCol, encoding) {
+  const col = quoteIdent(geomCol);
+  const ptToWkt = `pt -> CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR)`;
+  const ringToWkt = (inner) => `ring -> '(' || array_to_string(list_transform(ring, ${inner}), ', ') || ')'`;
+  const wrapGeom = (wktExpr) => `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText(${wktExpr}) ELSE NULL END`;
+  const arr = (expr, lambda) => `array_to_string(list_transform(${expr}, ${lambda}), ', ')`;
+
+  switch (encoding?.toLowerCase()) {
+    case 'wkb':
+      return `${col})`;
+    case 'wkt':
+      return `ST_GeomFromText(${col})`;
+    case 'point':
+      return `CASE WHEN ${col} IS NOT NULL AND ${col}.x IS NOT NULL THEN ST_Point(${col}.x, ${col}.y) ELSE NULL END`;
+    case 'linestring':
+      return wrapGeom(`'LINESTRING(' || ${arr(col, ptToWkt)} || ')'`);
+    case 'polygon':
+      return wrapGeom(`'POLYGON(' || ${arr(col, ringToWkt(ptToWkt))} || ')'`);
+    case 'multipoint':
+      return wrapGeom(`'MULTIPOINT(' || ${arr(col, `pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'`)} || ')'`);
+    case 'multilinestring':
+      return wrapGeom(`'MULTILINESTRING(' || ${arr(col, `line -> '(' || ${arr('line', ptToWkt)} || ')'`)} || ')'`);
+    case 'multipolygon':
+      return wrapGeom(`'MULTIPOLYGON(' || ${arr(col, `poly -> '(' || ${arr('poly', ringToWkt(ptToWkt))} || ')'`)} || ')'`);
+    default:
+      return `ST_GeomFromWKB(${col})`;
+  }
+}
+
 self.onmessage = async (ev) => {
   const msg = ev.data;
   if (!msg || msg.type !== 'convert') return;
@@ -107,6 +136,7 @@ self.onmessage = async (ev) => {
 
 async function convert({
   source,
+  encoding,
   sourceBuffer,
   sourceName,
   format,
@@ -142,7 +172,7 @@ async function convert({
   if (primaryGeoColumn) {
     const base = alreadyGeometry
       ? quoteIdent(primaryGeoColumn)
-      : `ST_GeomFromWKB(${quoteIdent(primaryGeoColumn)})`;
+      : await buildGeoExpr(primaryGeoColumn, encoding);
     if (sourceCrs) {
       const lit = sourceCrs.replace(/'/g, "''");
       geomExpr = `ST_Transform(${base}, '${lit}', 'EPSG:4326', true)`;
