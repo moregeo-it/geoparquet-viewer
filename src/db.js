@@ -333,6 +333,7 @@ export async function bootstrapMetadata(source, onProgress = () => {}) {
   }
 
   // 5. Column sizes for first row group (used for load-time warnings)
+  onProgress('Reading column sizes...');
   let columnSizes = null;
   try {
     const colSizeResult = await query(
