@@ -62,7 +62,7 @@ export default {
   emits: ['update:modelValue'],
   data() {
     return {
-      duckdbVersion: ''
+      duckdbVersion: 'n/a'
     };
   },
   async mounted() {
@@ -70,7 +70,6 @@ export default {
       this.duckdbVersion = await getDuckDBVersion();
     } catch (error) {
       console.log(error);
-      this.duckdbVersion = 'unknown';
     }
   }
 };

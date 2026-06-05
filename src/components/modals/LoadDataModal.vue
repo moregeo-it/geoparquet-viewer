@@ -38,10 +38,21 @@
 
         <v-divider class="my-4" />
 
-        <h3 class="text-subtitle-1 font-weight-bold mb-2">Examples</h3>
+        <h3 class="text-subtitle-1 font-weight-bold mb-2">Featured Examples</h3>
         <v-list density="compact" class="pa-0">
           <v-list-item
-            v-for="example in exampleList"
+            v-for="example in featuredExamples"
+            :key="example.url"
+            :title="example.title"
+            prepend-icon="mdi-file-certificate-outline"
+            @click="selectExample(example.url)"
+          />
+        </v-list>
+
+        <h3 class="text-subtitle-1 font-weight-bold mb-2">More Examples</h3>
+        <v-list density="compact" class="pa-0">
+          <v-list-item
+            v-for="example in moreExamples"
             :key="example.url"
             :title="example.title"
             prepend-icon="mdi-file-document-outline"
@@ -76,31 +87,37 @@ export default {
     return {
       newUrl: '',
       selectedFile: null,
-      exampleList: [
-        // tiny < 5 MB, small < 50 MB, medium < 200 MB, large < 1 GB, very large >= 1 GB
-        {
-          url: 'https://raw.githubusercontent.com/geoarrow/geoarrow-data/v0.2.0/natural-earth/files/natural-earth_cities_native.parquet',
-          title: 'Capital cities (< 1 MB, points, arrow-encoded)'
-        },
+      featuredExamples: [
         {
           url: 'https://raw.githubusercontent.com/visgl/loaders.gl/master/modules/parquet/test/data/geoparquet/airports.parquet',
-          title: 'Airports (< 1 MB, points)'
-        },
-        {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
-          title: 'Energy performance certificates in Wolverhampton, UK (2 MB, points)'
+          title: 'Airports (< 1 MB, points)',
+          featured: true
         },
         {
           url: 'https://raw.githubusercontent.com/developmentseed/labs-375-stac-geoparquet-backend/refs/heads/main/data/naip.parquet',
           title: 'STAC Geoparquet of NAIP data (2 MB, polygons)'
         },
         {
-          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
-          title: 'Field boundaries for North Rhine-Westphalia, Germany (254 MB, polygons)'
-        },
-        {
           url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/japan/japan.parquet',
           title: 'Field boundaries for Japan (4.5 GB, polygons)'
+        }
+      ],
+      moreExamples: [
+        {
+          url: 'https://raw.githubusercontent.com/geoarrow/geoarrow-data/v0.2.0/natural-earth/files/natural-earth_cities_native.parquet',
+          title: 'Capital cities (< 1 MB, points, arrow)'
+        },
+        {
+          url: 'https://raw.githubusercontent.com/hyparam/hyparquet/refs/heads/master/test/files/geospatial.parquet',
+          title: 'Test file (< 1 MB, multiple geometry types, native Parquet types)'
+        },
+        {
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
+          title: 'Energy performance certificates in Wolverhampton, UK (2 MB, points)'
+        },
+        {
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
+          title: 'Field boundaries for North Rhine-Westphalia, Germany (254 MB, polygons)'
         },
         {
           url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/france-ec/france_eurocrops_2018_fiboa.parquet',
