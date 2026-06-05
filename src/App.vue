@@ -208,13 +208,15 @@
       :geo-version="geoMetadata?.version || null"
     />
     <KvMetadataModal
+      v-if="kvMetadataDialogOpen"
       v-model="kvMetadataDialogOpen"
       :kv-metadata="kvMetadata"
       :initial-key="kvMetadataInitialKey"
     />
     <ParquetStatsModal v-model="parquetStatsDialogOpen" :source="source || ''" />
-    <AboutModal v-model="aboutDialogOpen" />
+    <AboutModal v-if="aboutDialogOpen" v-model="aboutDialogOpen" />
     <ConvertModal
+      v-if="convertDialogOpen"
       v-model="convertDialogOpen"
       :has-geometry="!!primaryGeoColumn"
       :default-name="defaultExportName"
@@ -237,13 +239,11 @@
       @proceed="onFileWarningProceed"
       @cancel="onFileWarningCancel"
     />
-
     <LoadAllModal
       v-model="confirmLoadAllOpen"
       :remaining-rows="remainingRows"
       @load-all="loadAll"
     />
-
     <DbInitErrorModal :model-value="Boolean(dbError)" :error="dbError" />
   </v-app>
 </template>
@@ -272,9 +272,7 @@ import AppBarMenu from './components/AppBarMenu.vue';
 import FilterPanel from './components/FilterPanel.vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 
-import AboutModal from './components/modals/AboutModal.vue';
 import LoadAllModal from './components/modals/LoadAllModal.vue';
-import ConvertModal from './components/modals/ConvertModal.vue';
 import FileInfoModal from './components/modals/FileInfoModal.vue';
 import LoadDataModal from './components/modals/LoadDataModal.vue';
 import ParquetStatsModal from './components/modals/ParquetStatsModal.vue';
@@ -284,12 +282,10 @@ import DbInitErrorModal from './components/modals/DbInitErrorModal.vue';
 import QuerySettingsModal from './components/modals/QuerySettingsModal.vue';
 import SplitPanes from './components/SplitPanes.vue';
 import PaneView from './components/PaneView.vue';
-import KvMetadataModal, {
-  FRIENDLY_NAMES as KV_FRIENDLY_NAMES
-} from './components/modals/KvMetadataModal.vue';
+import { FRIENDLY_NAMES as KV_FRIENDLY_NAMES } from './components/modals/KvMetadataModal.vue';
 
 import { startConversion } from './converter.js';
-import { shallowRef } from 'vue';
+import { defineAsyncComponent, shallowRef } from 'vue';
 
 import { version } from '../package.json';
 
@@ -300,10 +296,10 @@ export default {
     TableView,
     FilterPanel,
     LoadingOverlay,
-    AboutModal,
-    ConvertModal,
+    AboutModal: defineAsyncComponent(() => import('./components/modals/AboutModal.vue')),
+    ConvertModal: defineAsyncComponent(() => import('./components/modals/ConvertModal.vue')),
     FileInfoModal,
-    KvMetadataModal,
+    KvMetadataModal: defineAsyncComponent(() => import('./components/modals/KvMetadataModal.vue')),
     LoadDataModal,
     ParquetStatsModal,
     QuerySettingsModal,
