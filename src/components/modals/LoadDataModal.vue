@@ -87,7 +87,7 @@ export default {
           title: 'Airports (< 1 MB, points)'
         },
         {
-          url: 'https://data.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/addresscloud/epc/geoparquet-local-authority/Wolverhampton.parquet',
           title: 'Energy performance certificates in Wolverhampton, UK (2 MB, points)'
         },
         {
@@ -95,19 +95,19 @@ export default {
           title: 'STAC Geoparquet of NAIP data (2 MB, polygons)'
         },
         {
-          url: 'https://data.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/data/de_nrw/de_nrw.parquet',
           title: 'Field boundaries for North Rhine-Westphalia, Germany (254 MB, polygons)'
         },
         {
-          url: 'https://data.source.coop/fiboa/japan/japan.parquet',
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/japan/japan.parquet',
           title: 'Field boundaries for Japan (4.5 GB, polygons)'
         },
         {
-          url: 'https://data.source.coop/fiboa/france-ec/france_eurocrops_2018_fiboa.parquet',
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/fiboa/france-ec/france_eurocrops_2018_fiboa.parquet',
           title: 'EuroCrops 2018 for France (6 GB, polygons)'
         },
         {
-          url: 'https://data.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IDN/IDN.parquet',
+          url: 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/vida/google-microsoft-osm-open-buildings/geoparquet/by_country/country_iso=IDN/IDN.parquet',
           title: 'Open buildings in Indonesia (16 GB, polygons)'
         }
       ]
