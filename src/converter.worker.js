@@ -94,7 +94,7 @@ async function detectAlreadyGeometry(escaped, geoColumn) {
   return false;
 }
 
-async function buildGeoExpr(geomCol, encoding) {
+function buildGeoExpr(geomCol, encoding) {
   const col = quoteIdent(geomCol);
   const ptToWkt = `pt -> CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR)`;
   const ringToWkt = (inner) =>
@@ -180,7 +180,7 @@ async function convert({
   if (primaryGeoColumn) {
     const base = alreadyGeometry
       ? quoteIdent(primaryGeoColumn)
-      : await buildGeoExpr(primaryGeoColumn, encoding);
+      : buildGeoExpr(primaryGeoColumn, encoding);
     if (sourceCrs) {
       const lit = sourceCrs.replace(/'/g, "''");
       geomExpr = `ST_Transform(${base}, '${lit}', 'EPSG:4326', true)`;
