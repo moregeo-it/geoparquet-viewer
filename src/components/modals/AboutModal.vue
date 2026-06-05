@@ -42,20 +42,36 @@
           />
         </v-list>
         <p class="mb-3">
-          Under the hood, this viewer uses DuckDB (WASM) for efficient Parquet reading and
-          filtering, and deck.gl + MapLibre GL JS for GPU-accelerated map rendering.
+          Under the hood, this viewer uses DuckDB WASM for efficient Parquet reading and filtering,
+          and deck.gl + MapLibre GL JS for GPU-accelerated map rendering.
         </p>
+        <p class="mb-3">DuckDB version: {{ duckdbVersion }}</p>
       </v-card-text>
     </v-card>
   </v-dialog>
 </template>
 
 <script>
+import { getDuckDBVersion } from '@/db.js';
+
 export default {
   name: 'AboutModal',
   props: {
     modelValue: { type: Boolean, default: false }
   },
-  emits: ['update:modelValue']
+  emits: ['update:modelValue'],
+  data() {
+    return {
+      duckdbVersion: ''
+    };
+  },
+  async mounted() {
+    try {
+      this.duckdbVersion = await getDuckDBVersion();
+    } catch (error) {
+      console.log(error);
+      this.duckdbVersion = 'unknown';
+    }
+  }
 };
 </script>

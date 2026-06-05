@@ -112,10 +112,12 @@ export async function initDB(onProgress) {
 }
 
 export async function getDB() {
+  await _initPromise;
   return _db;
 }
 
 export async function getConnection() {
+  await _initPromise;
   return _conn;
 }
 
@@ -376,6 +378,17 @@ function blobToString(val) {
     return new TextDecoder().decode(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
   if (val instanceof ArrayBuffer) return new TextDecoder().decode(val);
   return String(val);
+}
+
+/**
+ * Get the DuckDB library version string.
+ *
+ * @returns {Promise<string>} Version string, e.g. "v1.2.0"
+ */
+export async function getDuckDBVersion() {
+  const result = await query('SELECT version() AS version;');
+  const row = result.toArray()[0];
+  return String(row.version);
 }
 
 /**
