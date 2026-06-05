@@ -632,7 +632,7 @@ export default {
                 this.loadDialogOpen = true;
               }
             },
-            this.source && {
+            this.source && !this.localFileName && {
               title: 'Convert',
               action: () => {
                 this.convertDialogOpen = true;
