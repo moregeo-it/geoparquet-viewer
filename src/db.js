@@ -185,8 +185,10 @@ function geomExpr(geoColumn, encoding) {
   const col = `"${geoColumn}"`;
   // Lambda fragment: converts a point struct {x, y} to a WKT coordinate string "x y".
   const ptToWkt = `pt -> CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR)`;
-  const ringToWkt = (inner) => `ring -> '(' || array_to_string(list_transform(ring, ${inner}), ', ') || ')'`;
-  const wrapGeom = (wktExpr) => `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText(${wktExpr}) ELSE NULL END`;
+  const ringToWkt = (inner) =>
+    `ring -> '(' || array_to_string(list_transform(ring, ${inner}), ', ') || ')'`;
+  const wrapGeom = (wktExpr) =>
+    `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText(${wktExpr}) ELSE NULL END`;
   const arr = (expr, lambda) => `array_to_string(list_transform(${expr}, ${lambda}), ', ')`;
 
   switch (encoding?.toLowerCase()) {
@@ -215,15 +217,21 @@ function geomExpr(geoColumn, encoding) {
 
     case 'multipoint':
       // LIST(STRUCT(x,y)) → MULTIPOINT((x1 y1), (x2 y2), ...)
-      return wrapGeom(`'MULTIPOINT(' || ${arr(col, `pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'`)} || ')'`);
+      return wrapGeom(
+        `'MULTIPOINT(' || ${arr(col, `pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'`)} || ')'`
+      );
 
     case 'multilinestring':
       // LIST(LIST(STRUCT(x,y))) → MULTILINESTRING((x1 y1, x2 y2), (...))
-      return wrapGeom(`'MULTILINESTRING(' || ${arr(col, `line -> '(' || ${arr('line', ptToWkt)} || ')'`)} || ')'`);
+      return wrapGeom(
+        `'MULTILINESTRING(' || ${arr(col, `line -> '(' || ${arr('line', ptToWkt)} || ')'`)} || ')'`
+      );
 
     case 'multipolygon':
       // LIST(LIST(LIST(STRUCT(x,y)))) → MULTIPOLYGON(((x y, ...), (...)), ((...)))
-      return wrapGeom(`'MULTIPOLYGON(' || ${arr(col, `poly -> '(' || ${arr('poly', ringToWkt(ptToWkt))} || ')'`)} || ')'`);
+      return wrapGeom(
+        `'MULTIPOLYGON(' || ${arr(col, `poly -> '(' || ${arr('poly', ringToWkt(ptToWkt))} || ')'`)} || ')'`
+      );
 
     default:
       // Fallback to WKB parsing for unknown types.

@@ -97,8 +97,10 @@ async function detectAlreadyGeometry(escaped, geoColumn) {
 async function buildGeoExpr(geomCol, encoding) {
   const col = quoteIdent(geomCol);
   const ptToWkt = `pt -> CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR)`;
-  const ringToWkt = (inner) => `ring -> '(' || array_to_string(list_transform(ring, ${inner}), ', ') || ')'`;
-  const wrapGeom = (wktExpr) => `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText(${wktExpr}) ELSE NULL END`;
+  const ringToWkt = (inner) =>
+    `ring -> '(' || array_to_string(list_transform(ring, ${inner}), ', ') || ')'`;
+  const wrapGeom = (wktExpr) =>
+    `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText(${wktExpr}) ELSE NULL END`;
   const arr = (expr, lambda) => `array_to_string(list_transform(${expr}, ${lambda}), ', ')`;
 
   switch (encoding?.toLowerCase()) {
@@ -113,11 +115,17 @@ async function buildGeoExpr(geomCol, encoding) {
     case 'polygon':
       return wrapGeom(`'POLYGON(' || ${arr(col, ringToWkt(ptToWkt))} || ')'`);
     case 'multipoint':
-      return wrapGeom(`'MULTIPOINT(' || ${arr(col, `pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'`)} || ')'`);
+      return wrapGeom(
+        `'MULTIPOINT(' || ${arr(col, `pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'`)} || ')'`
+      );
     case 'multilinestring':
-      return wrapGeom(`'MULTILINESTRING(' || ${arr(col, `line -> '(' || ${arr('line', ptToWkt)} || ')'`)} || ')'`);
+      return wrapGeom(
+        `'MULTILINESTRING(' || ${arr(col, `line -> '(' || ${arr('line', ptToWkt)} || ')'`)} || ')'`
+      );
     case 'multipolygon':
-      return wrapGeom(`'MULTIPOLYGON(' || ${arr(col, `poly -> '(' || ${arr('poly', ringToWkt(ptToWkt))} || ')'`)} || ')'`);
+      return wrapGeom(
+        `'MULTIPOLYGON(' || ${arr(col, `poly -> '(' || ${arr('poly', ringToWkt(ptToWkt))} || ')'`)} || ')'`
+      );
     default:
       return `ST_GeomFromWKB(${col})`;
   }

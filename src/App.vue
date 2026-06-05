@@ -632,12 +632,13 @@ export default {
                 this.loadDialogOpen = true;
               }
             },
-            this.source && !this.localFileName && {
-              title: 'Convert',
-              action: () => {
-                this.convertDialogOpen = true;
+            this.source &&
+              !this.localFileName && {
+                title: 'Convert',
+                action: () => {
+                  this.convertDialogOpen = true;
+                }
               }
-            }
           ].filter(Boolean)
         },
         (this.fileInfo || this.schema || this.kvMetadata || this.geoMetadata) && {
