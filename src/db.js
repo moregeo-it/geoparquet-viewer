@@ -185,6 +185,11 @@ function geomExpr(geoColumn, encoding) {
   const col = `"${geoColumn}"`;
   // Lambda fragment: converts a point struct {x, y} to a WKT coordinate string "x y".
   const ptToWkt = `pt -> CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR)`;
+  const ringToWkt = (inner) =>
+    `ring -> '(' || array_to_string(list_transform(ring, ${inner}), ', ') || ')'`;
+  const wrapGeom = (wktExpr) =>
+    `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText(${wktExpr}) ELSE NULL END`;
+  const arr = (expr, lambda) => `array_to_string(list_transform(${expr}, ${lambda}), ', ')`;
 
   switch (encoding?.toLowerCase()) {
     case 'wkb':
@@ -204,32 +209,28 @@ function geomExpr(geoColumn, encoding) {
 
     case 'linestring':
       // LIST(STRUCT(x,y)) → LINESTRING(x1 y1, x2 y2, ...)
-      return `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('LINESTRING(' || array_to_string(list_transform(${col}, ${ptToWkt}), ', ') || ')') ELSE NULL END`;
+      return wrapGeom(`'LINESTRING(' || ${arr(col, ptToWkt)} || ')'`);
 
     case 'polygon':
       // LIST(LIST(STRUCT(x,y))) → POLYGON((x1 y1, ...), (x2 y2, ...))
-      return (
-        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('POLYGON(' || array_to_string(list_transform(${col}, ` +
-        `ring -> '(' || array_to_string(list_transform(ring, ${ptToWkt}), ', ') || ')'), ', ') || ')') ELSE NULL END`
-      );
+      return wrapGeom(`'POLYGON(' || ${arr(col, ringToWkt(ptToWkt))} || ')'`);
 
     case 'multipoint':
       // LIST(STRUCT(x,y)) → MULTIPOINT((x1 y1), (x2 y2), ...)
-      return `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTIPOINT(' || array_to_string(list_transform(${col}, pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'), ', ') || ')') ELSE NULL END`;
+      return wrapGeom(
+        `'MULTIPOINT(' || ${arr(col, `pt -> '(' || CAST(pt.x AS VARCHAR) || ' ' || CAST(pt.y AS VARCHAR) || ')'`)} || ')'`
+      );
 
     case 'multilinestring':
       // LIST(LIST(STRUCT(x,y))) → MULTILINESTRING((x1 y1, x2 y2), (...))
-      return (
-        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTILINESTRING(' || array_to_string(list_transform(${col}, ` +
-        `line -> '(' || array_to_string(list_transform(line, ${ptToWkt}), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      return wrapGeom(
+        `'MULTILINESTRING(' || ${arr(col, `line -> '(' || ${arr('line', ptToWkt)} || ')'`)} || ')'`
       );
 
     case 'multipolygon':
       // LIST(LIST(LIST(STRUCT(x,y)))) → MULTIPOLYGON(((x y, ...), (...)), ((...)))
-      return (
-        `CASE WHEN ${col} IS NOT NULL AND len(${col}) > 0 THEN ST_GeomFromText('MULTIPOLYGON(' || array_to_string(list_transform(${col}, ` +
-        `poly -> '(' || array_to_string(list_transform(poly, ` +
-        `ring -> '(' || array_to_string(list_transform(ring, ${ptToWkt}), ', ') || ')'), ', ') || ')'), ', ') || ')') ELSE NULL END`
+      return wrapGeom(
+        `'MULTIPOLYGON(' || ${arr(col, `poly -> '(' || ${arr('poly', ringToWkt(ptToWkt))} || ')'`)} || ')'`
       );
 
     default:

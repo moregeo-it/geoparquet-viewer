@@ -466,6 +466,11 @@ export default {
       if (!this.needsReprojection) return null;
       return JSON.stringify(this.primaryGeoCrs);
     },
+    /** Geometry encoding for the primary geo column ('wkb' or 'wkt') */
+    geomEncoding() {
+      if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return null;
+      return this.geoMetadata.columns[this.primaryGeoColumn]?.encoding ?? null;
+    },
     /** Whether the primary geo column has covering/bbox metadata */
     hasBboxCovering() {
       if (!this.geoMetadata?.columns || !this.primaryGeoColumn) return false;
@@ -627,12 +632,13 @@ export default {
                 this.loadDialogOpen = true;
               }
             },
-            this.source && {
-              title: 'Convert',
-              action: () => {
-                this.convertDialogOpen = true;
+            this.source &&
+              !this.localFileName && {
+                title: 'Convert',
+                action: () => {
+                  this.convertDialogOpen = true;
+                }
               }
-            }
           ].filter(Boolean)
         },
         (this.fileInfo || this.schema || this.kvMetadata || this.geoMetadata) && {
@@ -1043,8 +1049,6 @@ export default {
       // Avoids SELECT * which fetches bbox structs, binary blobs, etc.
       const tableColNames = this.visibleColumns.map((c) => c.name);
       const geoCol = this.loadGeometry ? this.primaryGeoColumn : null;
-
-      const colMeta = this.geoMetadata?.columns?.[geoCol];
       const selectColumns = geoCol ? [...tableColNames, geoCol] : tableColNames;
 
       if (tableColNames.length === 0 && !geoCol) {
@@ -1059,7 +1063,7 @@ export default {
       const result = await queryData(this.source, {
         geoColumn: geoCol,
         filters: this.filters,
-        encoding: colMeta?.encoding || null,
+        encoding: this.geomEncoding,
         bbox: this.spatialFilterActive ? this.viewportBounds : null,
         sourceCrs: this.sourceCrsString,
         columns: selectColumns,
@@ -1243,6 +1247,7 @@ export default {
         format,
         outputName,
         schema: this.schema,
+        encoding: this.geomEncoding,
         geoColumns: this.geoColumns,
         primaryGeoColumn: this.primaryGeoColumn,
         sourceCrs: this.sourceCrsString,

@@ -30,6 +30,8 @@ export const FORMATS = [
  * @param {Array} opts.schema - Schema columns ({name, type, ...}).
  * @param {Array<string>} opts.geoColumns - Names of geometry columns.
  * @param {string|null} opts.primaryGeoColumn - Primary geometry column name.
+ * @param {string|null} opts.encoding - Geometry encoding ('wkb', 'wkt', or 'native geoArrow').
+
  * @param {string|null} opts.sourceCrs - Source CRS as PROJJSON string (null = WGS84).
  * @param {Function} opts.onStatus - status(message) callback.
  * @returns {{ promise: Promise<{filename:string}>, cancel: Function }}
@@ -42,6 +44,7 @@ export function startConversion({
   schema,
   geoColumns = [],
   primaryGeoColumn = null,
+  encoding = null,
   sourceCrs = null,
   onStatus = () => {}
 }) {
@@ -97,6 +100,7 @@ export function startConversion({
       {
         type: 'convert',
         source,
+        encoding,
         sourceBuffer,
         sourceName: sourceBuffer ? `convert_src_${Date.now()}.parquet` : null,
         format,
